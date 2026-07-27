@@ -14,7 +14,8 @@
 * **Mandat de recherche** : contrat par lequel un client charge un chasseur de trouver un bien. **Validité 6 mois**, renouvelable.
 * **Mandat exclusif** : le client ne peut passer que par ce chasseur ; même s'il trouve seul, le chasseur est rémunéré.
 * **Mandat non-exclusif** : le client peut solliciter plusieurs chasseurs ; s'il trouve seul, le chasseur peut ne pas être payé.
-* **Demande / critères de recherche** : ce que le client cherche (type de bien, budget, surface, secteur, options…). Dans le modèle cible, c'est une entité structurée, distincte du mandat.
+* **Demande / critères de recherche** : ce que le client cherche (type de bien, budget, surface, secteur, options…). Dans le modèle cible, c'est une entité structurée, distincte du mandat. La demande **évolue dans le temps** (le chasseur la remanie, le client change d'avis) : on en conserve l'**historique versionné** par mandat (date, auteur, motif de chaque changement) plutôt que de l'écraser.
+* **Version de demande** : un état daté de la demande à un instant donné. Chaque modification crée une nouvelle version ; la plus récente est la version « courante ». On ne supprime jamais les précédentes.
 
 ## Le bien et sa recherche
 

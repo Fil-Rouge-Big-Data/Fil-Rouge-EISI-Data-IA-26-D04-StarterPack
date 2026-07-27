@@ -10,6 +10,44 @@
 > * [`TRACABILITE-COMPETENCES.md`](./documents%20utiles/TRACABILITE-COMPETENCES.md) — la matrice compétence → étape → livrable ;
 > * [`GRILLE-EVALUATION.md`](./documents%20utiles/GRILLE-EVALUATION.md) — le calibrage des livrables et la grille d'auto-évaluation.
 
+> ⚠️ **Avertissement.** Cette entreprise, son organisation, ses données et ses personnages sont **entièrement fictifs**. Toute ressemblance avec une entreprise existante ou ayant existé, ou avec des personnes réelles, serait purement **fortuite**. Les données fournies sont des données de test générées pour l'exercice.
+
+---
+
+## Comment utiliser ce dépôt
+
+Ce dépôt est votre point de départ. Voici comment vous y retrouver :
+
+### Ce que contient le dépôt
+
+```
+Projet Fil rouge/
+├── Readme.md              ← vous êtes ici : contexte, mission, livrables
+├── fixtures/              ← les données de départ (l'existant à auditer)
+│   ├── MySQL.sql          ← à jouer sur MariaDB/MySQL
+│   ├── PgSQL.sql          ← à jouer sur PostgreSQL
+│   └── Readme.md          ← comment importer, ce qui vous attend
+└── documents utiles/      ← 📚 fiches de cours & modèles à remplir
+    └── Readme.md          ← l'index de tous les documents
+```
+
+### 📚 Les documents utiles
+
+Le dossier **[`documents utiles/`](./documents%20utiles/)** contient tout ce qu'il faut pour produire vos livrables : des **fiches de cours** (MCD/Merise, OLTP & OLAP, RACI, RGPD…) qui expliquent chaque notion, et des **modèles à remplir** (note de cadrage, matrice de décision, plan de tests, journal de décisions…). Commencez par son **[index](./documents%20utiles/Readme.md)**, qui range chaque document par usage, par phase et par bloc de compétences.
+
+### Par où commencer
+
+1. **Lisez ce Readme en entier** : contexte, parcours utilisateurs, mission en 4 phases, exigences transverses.
+2. **Importez les fixtures** en suivant le [`Readme des fixtures`](./fixtures/Readme.md), et explorez l'existant.
+3. **Ouvrez l'[index des documents utiles](./documents%20utiles/Readme.md)** et sa section « Comment démarrer ».
+4. **Attaquez la Phase 1** (audit), puis avancez phase par phase.
+5. **Tracez vos décisions** au fil de l'eau (voir le journal de décisions) : chaque choix devra être défendu à l'oral.
+
+### Règles du jeu
+
+* Les fichiers de **`fixtures/`** représentent l'existant : **ne les modifiez pas**, migrez à partir d'eux.
+* Les **modèles** de `documents utiles/` se **dupliquent** dans vos propres fichiers ; ne remplissez pas les originaux.
+* **Gardez des traces** de tout : c'est la matière de votre Dossier Professionnel et de la soutenance.
 ---
 
 ## Le contexte
@@ -166,7 +204,7 @@ L'organisation du SI a été imaginée entièrement par le patron de l'entrepris
 Auditer la base de données actuelle à partir d'un état des lieux du modèle de données.
 
 * Dressez la **cartographie du SI** hérité (schéma) — *compétence BC01 « Schématiser une cartographie du SI en utilisant une méthode d'analyse de risques »*.
-* Constituez un **registre des anomalies et des risques**. Utilisez pour cela les fichiers [`fixtures/MySQL-avec-anomalie.sql`](./fixtures/MySQL-avec-anomalie.sql) / [`fixtures/PgSQL-avec-anomalie.sql`](./fixtures/PgSQL-avec-anomalie.sql), qui contiennent une **incohérence métier réelle** à débusquer, en plus des défauts de structure (rôles mélangés, critères en texte libre, 6 mois non matérialisés…).
+* Constituez un **registre des anomalies et des risques**. Les fixtures ([`fixtures/MySQL.sql`](./fixtures/MySQL.sql) / [`fixtures/PgSQL.sql`](./fixtures/PgSQL.sql)) sont parsemées d'annotations du consultant passé avant vous (préfixe `-- [consultant]`) : elles pointent des défauts de structure (rôles mélangés, critères en texte libre, 6 mois non matérialisés…) **et** au moins une **incohérence métier réelle** à débusquer dans les données. À vous de les qualifier et de les prioriser.
 
 > 📦 **Livrable :** dossier d'audit (cartographie + registre d'anomalies + analyse).
 
@@ -177,7 +215,7 @@ Envisager les solutions pour que les données répondent au besoin métier exist
 * **Élaborez la stratégie d'évolution** et priorisez (BC01/BC02).
 * **Concevez le modèle de données cible** (BC05, compétence pivot *« Concevoir une base de données en analysant les exigences des traitements analytiques et d'IA »*) :
   * scinder `utilisateurs` en `clients` et `chasseurs` ;
-  * `mandats` détaillé (date + mode de signature, exclusivité, **`date_fin` = signature + 6 mois**) et `demandes` (critères **structurés**) ;
+  * `mandats` détaillé (date + mode de signature, exclusivité, **`date_fin` = signature + 6 mois**) et `demandes` (critères **structurés**) ; la demande **évolue au fil du mandat**, il faut donc **historiser ses versions** (date, auteur, motif de chaque changement) plutôt que de l'écraser ;
   * `biens` + `commentaires` (commentaire sur un bien dans le contexte d'une demande, par un client ou un chasseur) ;
   * `baremes_commission` (par **tranches de montant**, variables dans le temps et par chasseur) + `paiements`.
 * Rédigez le **cahier des charges technique** (BC02) **respectant le RGPD** et intégrant l'**accessibilité PSH**.

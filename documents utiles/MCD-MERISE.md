@@ -47,9 +47,9 @@ Pour chaque entité reliée à une association, on se demande : *« une occurren
 erDiagram
     CLIENT   ||--o{ MANDAT : signe
     CHASSEUR ||--o{ MANDAT : execute
-    MANDAT   ||--|| DEMANDE : precise
+    MANDAT   ||--|{ DEMANDE_VERSION : "historise"
+    DEMANDE_VERSION ||--o{ PRESENTATION : "sert de base a"
     BIEN     ||--o{ PRESENTATION : concerne
-    DEMANDE  ||--o{ PRESENTATION : recoit
     CLIENT {
         int id_client PK
         string nom
@@ -62,16 +62,39 @@ erDiagram
         date date_fin
         bool exclusif
     }
-    DEMANDE {
-        int id_demande PK
+    DEMANDE_VERSION {
+        int id_version PK
+        int id_mandat FK
+        int no_version
+        datetime date_modification
+        int modifie_par FK
+        string motif
         int surface_min
         int budget_max
         int nb_pieces_min
+        bool est_courante
     }
 ```
 
-> Les cardinalités Mermaid : `||--o{` = « un et un seul » côté barre, « zéro ou plusieurs » côté patte de corbeau. C'est la traduction visuelle de (1,1) et (0,n).
+> Les cardinalités Mermaid : `||--o{` = (1,1) d'un côté, (0,n) de l'autre ; `||--|{` = (1,1) d'un côté, (1,n) de l'autre (au moins une occurrence). Ici, **un mandat a au moins une version de demande** (la version initiale) et en accumule d'autres à chaque changement.
 
+---
+
+## Cas concret : historiser la demande de recherche
+
+> Une subtilité **métier** que révèle l'usage réel, et que votre modèle doit capturer.
+
+Dans la vraie vie : le client formule une demande initiale, le chasseur la remanie parfois avant la signature, **puis cette demande évolue au fil du mandat** (le budget monte, le secteur s'élargit, on renonce au balcon…). Si on écrase la demande à chaque changement, **on perd l'information**. Or savoir *comment* et *pourquoi* une recherche a évolué a de la valeur (pour le chasseur, pour la performance, pour l'IA).
+
+La solution est l'**historisation** : au lieu d'une seule ligne « demande » qu'on modifie, on conserve **une version par état successif**.
+
+* Chaque **version** de demande enregistre : le mandat concerné, un numéro de version, la **date** du changement, **qui** l'a fait (`modifie_par`), le **motif**, et les critères de recherche de ce moment-là.
+* Un indicateur `est_courante` (ou la version au numéro le plus élevé) repère la version active.
+* On **n'efface jamais** une version : on en ajoute une nouvelle. L'historique est ainsi complet et daté.
+
+> 🧠 **Principe général : ne jamais écraser une donnée dont l'évolution compte.** On ajoute une ligne datée plutôt que de modifier en place. C'est le même réflexe que pour un journal de décisions ou un historique de paiements.
+
+Conséquence sur les cardinalités : **un mandat est lié à plusieurs versions de demande** (au moins une, la version initiale) → relation (1,1)–(1,n). C'est ce que traduit le `||--|{` du diagramme ci-dessus.
 ---
 
 ## Du MCD au MLD : les règles de passage
@@ -82,7 +105,7 @@ erDiagram
 2. **Association « un à plusieurs » (1,n)** : la clé primaire du côté « un » descend comme **clé étrangère (FK)** du côté « plusieurs ».
    * *Ex. : un client signe plusieurs mandats → `mandats.client_id` référence `clients.id`.*
 3. **Association « plusieurs à plusieurs » (n,n)** : on crée une **table d'association** portant les deux clés étrangères.
-   * *Ex. : un bien est présenté pour plusieurs demandes et une demande reçoit plusieurs biens → table `presentations(bien_id, demande_id)`.*
+   * *Ex. : un bien peut être présenté pour plusieurs versions de demande, et une version de demande donne lieu à plusieurs présentations → table `presentations(bien_id, id_version)`.*
 4. **Les propriétés de l'association** (s'il y en a) vont dans la table issue de l'association.
 
 ---
@@ -105,6 +128,7 @@ erDiagram
 * **Associations et cardinalités :** _(ex. CLIENT (1,n) — (1,1) MANDAT)_
 * **Schéma :** _(insérez votre diagramme, Mermaid ou export d'outil)_
 * **Choix débattus dans le binôme :** _(ex. comment gérer l'auteur d'un commentaire, client OU chasseur — quelle solution, pourquoi ?)_
+* **Données à historiser :** _(quelles entités évoluent dans le temps et doivent conserver leur historique ? au minimum la demande de recherche — voir « Cas concret : historiser la demande »)_
 
 ---
 
