@@ -127,7 +127,7 @@ Conséquence sur les cardinalités : **un mandat est lié à plusieurs versions 
 * **Entités identifiées :** _(liste)_
 * **Associations et cardinalités :** _(ex. CLIENT (1,n) — (1,1) MANDAT)_
 * **Schéma :** _(insérez votre diagramme, Mermaid ou export d'outil)_
-* **Choix débattus dans le binôme :** _(ex. comment gérer l'auteur d'un commentaire, client OU chasseur — quelle solution, pourquoi ?)_
+* **Choix débattus dans le groupe :** _(ex. comment gérer l'auteur d'un commentaire, client OU chasseur — quelle solution, pourquoi ?)_
 * **Données à historiser :** _(quelles entités évoluent dans le temps et doivent conserver leur historique ? au minimum la demande de recherche — voir « Cas concret : historiser la demande »)_
 
 ---

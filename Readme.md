@@ -295,7 +295,7 @@ Les données présentes sont un échantillon des données réelles telles qu'exi
 
 ## La soutenance (restitution orale)
 
-> Chaque bloc du RNCP40573 se conclut par une **restitution orale** devant un jury composé de **2 professionnels externes** et **1 représentant du certificateur**. Préparez-la comme telle.
+> Le travail est réalisé **en groupe**, mais la **soutenance est individuelle** : chacun présente et défend **seul** le projet devant un jury composé de **2 professionnels externes** et **1 représentant du certificateur**. Préparez-vous en conséquence.
 
 * **Format :** présentation du projet + défense des choix, suivie de questions du jury.
 * **Ce que vous devez savoir défendre :**
@@ -303,7 +303,7 @@ Les données présentes sont un échantillon des données réelles telles qu'exi
   * vos **choix d'architecture** et les alternatives écartées (matrice de décision à l'appui) ;
   * vos arbitrages **RGPD**, **éco-conception**, **accessibilité**, **souveraineté IA** ;
   * la **traçabilité** de vos décisions (qui a décidé quoi, pourquoi, quand).
-* **Règle du binôme :** le jury peut désigner **qui** répond. Chaque membre doit pouvoir expliquer **chaque** livrable — y compris ceux produits par l'autre.
+* **Conséquence directe :** puisque vous passez seul, vous devez pouvoir expliquer et défendre **l'intégralité** du projet — y compris les livrables produits par d'autres membres du groupe. Se répartir la production ne dispense personne d'en maîtriser l'ensemble.
 
 ---
 

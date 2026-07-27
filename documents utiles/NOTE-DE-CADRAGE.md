@@ -46,7 +46,7 @@ _(Les grandes phases et leurs dates clés. Un schéma Gantt peut compléter.)_
 | _…_ | _…_ | _…_ |
 
 ### 7. Ressources
-_(Moyens humains, techniques, budgétaires. Ici : le binôme, l'environnement Docker, les SGBD…)_
+_(Moyens humains, techniques, budgétaires. Ici : le groupe, l'environnement Docker, les SGBD…)_
 
 ### 8. Risques identifiés
 _(Les principaux risques et comment les limiter. Renvoie vers votre matrice des risques / PCA-PRA.)_

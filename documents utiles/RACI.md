@@ -19,7 +19,7 @@ Sur un projet à plusieurs, la même tâche peut impliquer plusieurs personnes �
 
 * **Exactement un A par ligne.** Deux « A », c'est deux capitaines : personne ne tranche. Zéro « A », personne n'assume.
 * **Au moins un R par ligne.** Sinon la tâche n'est faite par personne.
-* **R et A peuvent être la même personne** (elle fait ET assume) — courant sur un petit binôme.
+* **R et A peuvent être la même personne** (elle fait ET assume) — fréquent dans un petit groupe.
 * **Ne pas sur-consulter.** Trop de « C » paralyse. Consulté = son avis change la décision ; sinon, c'est juste « I ».
 * **C = dialogue, I = notification.** Ne pas confondre : on *consulte* avant de décider, on *informe* une fois décidé.
 
@@ -37,21 +37,23 @@ Sur un projet à plusieurs, la même tâche peut impliquer plusieurs personnes �
 
 ---
 
-## Exemple de matrice RACI *(binôme + parties prenantes du projet)*
+## Exemple de matrice RACI *(groupe + parties prenantes du projet)*
 
-> Adaptez les rôles : ici **Éq. A** et **Éq. B** = les deux membres du binôme ; **Formateur** joue le commanditaire/expert ; **Jury** = destinataire final.
+> Adaptez à la taille de votre groupe : ici **Éq. A**, **Éq. B** et **Éq. C** = trois membres ; **Formateur** joue le commanditaire/expert ; **Jury** = destinataire final. Ajoutez autant de colonnes que d'équipiers.
 
-| Tâche / Livrable | Éq. A | Éq. B | Formateur | Jury |
-| --- | --- | --- | --- | --- |
-| Audit de l'existant | **R/A** | C | C | I |
-| Modélisation MCD cible | R | **A** | C | I |
-| Script de migration SQL | **R/A** | C | I | — |
-| Note de cadrage | C | **R/A** | C | I |
-| Conception OLAP | R | **A** | C | I |
-| Registre RGPD | **R/A** | C | C | I |
-| Préparation de la soutenance | R | **R** puis **A** | C | I |
+| Tâche / Livrable | Éq. A | Éq. B | Éq. C | Formateur | Jury |
+| --- | --- | --- | --- | --- | --- |
+| Audit de l'existant | **A** | R | R | C | I |
+| Modélisation MCD cible | R | **A** | C | C | I |
+| Script de migration SQL | **R/A** | R | C | I | — |
+| Note de cadrage | C | C | **R/A** | C | I |
+| Conception OLAP | R | **A** | R | C | I |
+| Registre RGPD | C | **R/A** | C | C | I |
+| Préparation de la soutenance (chacun la sienne) | **R/A** | **R/A** | **R/A** | C | I |
 
-> Lecture d'une ligne : pour « Modélisation MCD cible », Éq. B **assume** (A) et valide, Éq. A **réalise** (R), le formateur est **consulté** (C), le jury sera **informé** (I) via le livrable final.
+> ℹ️ La soutenance étant **individuelle**, chacun est à la fois R et A de **sa propre** préparation : personne n'« assume » l'oral d'un autre.
+
+> Lecture d'une ligne : pour « Modélisation MCD cible », Éq. B **assume** (A) et valide, Éq. A **réalise** (R), Éq. C est **consulté** (C), le formateur aussi (C), et le jury sera **informé** (I) via le livrable final.
 
 ---
 

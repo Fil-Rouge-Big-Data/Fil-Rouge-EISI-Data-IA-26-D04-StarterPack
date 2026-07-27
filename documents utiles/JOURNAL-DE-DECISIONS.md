@@ -47,7 +47,7 @@ _(Ce que ce choix implique, y compris les inconvénients acceptés.)_
 
 * **Date :** 25/07/2026
 * **Statut :** accepté
-* **Décideurs :** binôme (voir RACI)
+* **Décideurs :** le groupe (voir RACI)
 
 **Contexte** — Les projections annoncent des milliers de mandats/semaine et un besoin de pilotage. Faire l'analytique sur la base de production la ralentirait.
 

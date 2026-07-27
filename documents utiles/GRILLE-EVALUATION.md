@@ -5,7 +5,7 @@
 Ce document a deux fonctions :
 
 1. **Calibrer la profondeur attendue** de chaque livrable (éviter aussi bien le bâclage que la sur-production) ;
-2. Fournir une **grille d'auto-évaluation adossée aux compétences**, à remplir par le binôme avant la soutenance.
+2. Fournir une **grille d'auto-évaluation adossée aux compétences**, à remplir par le groupe avant la soutenance.
 
 ---
 
@@ -100,6 +100,6 @@ Ce document a deux fonctions :
 
 ---
 
-## 3. Règle du binôme
+## 3. Travail en groupe, soutenance individuelle
 
-> **Chaque membre du binôme doit pouvoir expliquer chaque livrable.** À l'oral, le jury peut désigner qui répond. Un livrage produit par l'un mais incompris par l'autre est un risque de non-validation. Répartissez la production, mais **partagez la compréhension**.
+> Le projet se **produit en groupe**, mais la **soutenance se passe seul** : chacun défend l'intégralité du travail devant le jury. Un livrable produit par un membre mais incompris des autres devient donc un risque de non-validation **pour ceux qui ne sauront pas l'expliquer**. Répartissez la production, mais **partagez la compréhension de tout**.

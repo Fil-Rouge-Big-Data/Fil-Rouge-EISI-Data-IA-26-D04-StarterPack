@@ -1,12 +1,12 @@
 # 🎤 Trame de soutenance — modèle
 
-> **Fiche + modèle.** Chaque bloc du RNCP40573 se conclut par une **restitution orale** devant un jury (2 professionnels externes + 1 représentant du certificateur). Cette trame aide à structurer la présentation et à anticiper les questions. À préparer en fin de projet. Voir [`TRACABILITE-COMPETENCES.md`](./TRACABILITE-COMPETENCES.md).
+> **Fiche + modèle.** Le projet se réalise **en groupe**, mais la **soutenance est individuelle** : vous présentez et défendez **seul** l'ensemble du travail devant un jury (2 professionnels externes + 1 représentant du certificateur). Cette trame aide à structurer votre présentation et à anticiper les questions. À préparer en fin de projet. Voir [`TRACABILITE-COMPETENCES.md`](./TRACABILITE-COMPETENCES.md).
 
 ## Ce que le jury évalue
 
 Pas seulement « avez-vous produit les livrables », mais **« comprenez-vous ce que vous avez fait et pourquoi »**. La soutenance teste votre capacité à expliquer, justifier et défendre vos choix. Un livrable brillant mal défendu vaut moins qu'un livrable correct bien expliqué.
 
-> 🧠 Règle du binôme : le jury peut désigner **qui** répond. Chaque membre doit pouvoir parler de **chaque** partie, même celle produite par l'autre.
+> 🧠 Point crucial : vous passez **seul**. Vous devez pouvoir parler de **chaque** partie du projet, y compris celles produites par d'autres membres du groupe. « Ce n'est pas moi qui l'ai fait » n'est pas une réponse recevable devant le jury.
 
 ---
 
@@ -32,7 +32,7 @@ Pas seulement « avez-vous produit les livrables », mais **« comprenez-vous ce
 * Comment migrez-vous sans perdre de données ?
 * Que se passe-t-il si le serveur tombe ?
 * Comment évitez-vous qu'une IA branchée sur la base cause des dégâts ?
-* Qui a fait quoi dans le binôme ?
+* Qui a fait quoi dans le groupe ?
 * Si c'était à refaire, que changeriez-vous ?
 
 > 💡 Pour chaque choix figurant dans vos livrables, préparez la phrase « on a choisi X **parce que** Y, plutôt que Z ». C'est exactement ce que le jury veut entendre.
@@ -42,7 +42,7 @@ Pas seulement « avez-vous produit les livrables », mais **« comprenez-vous ce
 ## Modèle à remplir
 
 * **Durée allouée :** _(à confirmer)_
-* **Répartition binôme à l'oral :** _(qui présente quoi)_
+* **Parties produites par d'autres à bien maîtriser :** _(ce que vous n'avez pas fait vous-même mais devrez défendre seul)_
 * **3 choix clés à défendre absolument :** _(les plus structurants)_
 * **Démo prévue :** _(quoi montrer en direct, et le plan B si ça plante)_
 * **Limites assumées :** _(ce que vous reconnaissez)_

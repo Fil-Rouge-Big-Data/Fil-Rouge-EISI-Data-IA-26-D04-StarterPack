@@ -10,7 +10,7 @@ Cette matrice relie **chaque compétence du référentiel** aux **étapes du pro
 * le formateur — vérifier la couverture du référentiel ;
 * le jury — retrouver la preuve de chaque compétence dans les livrables produits.
 
-> **Rappel des modalités d'évaluation du titre** (identiques pour tous les blocs) : *mise en situation professionnelle reconstituée, production de livrable(s) et restitution orale* devant 2 professionnels externes + 1 représentant du certificateur.
+> **Rappel des modalités d'évaluation du titre** (identiques pour tous les blocs) : *mise en situation professionnelle reconstituée, production de livrable(s) et restitution orale* devant 2 professionnels externes + 1 représentant du certificateur. Le travail se fait **en groupe**, mais la **restitution orale est individuelle** : chacun défend seul l'ensemble du projet.
 
 ---
 

@@ -24,7 +24,7 @@ EXTERNE |        OPPORTUNITÉS            |             MENACES
 
 * **Objet de l'analyse :** _(ex. le SI hérité de l'entreprise / le passage à l'échelle international / l'ajout de l'IA…)_
 * **Date :** _(JJ/MM/AAAA — rappel : date de référence du projet = 25/07/2026)_
-* **Auteurs (binôme) :** _(prénoms)_
+* **Auteurs (groupe) :** _(prénoms)_
 
 ---
 

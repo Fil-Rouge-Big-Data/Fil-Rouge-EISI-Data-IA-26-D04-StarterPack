@@ -62,7 +62,7 @@ Types courants : `feat` (nouveauté), `fix` (correction), `docs` (documentation)
 
 * **Structure de dossiers retenue :** _(la vôtre)_
 * **Convention de nommage :** _(kebab-case ? préfixe par phase ?)_
-* **Répartition binôme :** _(qui travaille sur quoi — voir RACI)_
+* **Répartition dans le groupe :** _(qui travaille sur quoi — voir RACI)_
 * **Outil de versionnage :** _(Git ? dossier partagé ?)_
 
 > ⚠️ À l'oral, un dépôt propre et navigable donne d'emblée une impression de sérieux. Un jury qui trouve facilement vos livrables est un jury bien disposé.

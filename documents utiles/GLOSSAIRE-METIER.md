@@ -1,6 +1,6 @@
 # 📖 Glossaire métier — chasse immobilière
 
-> **Fiche de référence.** Le domaine de la chasse immobilière a son vocabulaire. Ce lexique évite les malentendus dans le binôme et avec le jury, et garantit que tout le monde parle de la même chose. À enrichir au fil du projet.
+> **Fiche de référence.** Le domaine de la chasse immobilière a son vocabulaire. Ce lexique évite les malentendus au sein du groupe et avec le jury, et garantit que tout le monde parle de la même chose. À enrichir au fil du projet.
 
 ## Acteurs
 
