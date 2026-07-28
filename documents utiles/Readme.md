@@ -20,6 +20,7 @@ Trois types de documents cohabitent :
 | --- | --- | --- | --- |
 | [`MODELE-SWOT.md`](./MODELE-SWOT.md) | Fiche + modèle | Diagnostic stratégique (Forces / Faiblesses / Opportunités / Menaces) avant une décision | Phase 1 & 3 · **BC01** |
 | [`NOTE-DE-CADRAGE.md`](./NOTE-DE-CADRAGE.md) | Fiche + modèle | Lancer officiellement le projet : objectifs, périmètre, livrables, jalons, risques | Phase 2 · **BC02** |
+| [`CAHIER-DES-CHARGES-TECHNIQUE.md`](./CAHIER-DES-CHARGES-TECHNIQUE.md) | Fiche + exemple | Traduire la note de cadrage en exigences techniques vérifiables (fonctionnelles, RGPD, accessibilité, perf…) | Phase 2-4 · **BC02** |
 | [`MATRICE-DECISION.md`](./MATRICE-DECISION.md) | Fiche + modèle | Choisir entre plusieurs options de façon rationnelle et traçable (critères pondérés) | Tout choix important · **BC01** |
 | [`RACI.md`](./RACI.md) | Fiche + modèle | Clarifier qui fait quoi (Réalise / Autorité / Consulté / Informé) | Dès le lancement · **BC02** |
 | [`JOURNAL-DE-DECISIONS.md`](./JOURNAL-DE-DECISIONS.md) | Fiche + modèle | Garder la trace de chaque choix structurant (format ADR) | En continu · **BC02** |
@@ -87,7 +88,7 @@ Trois types de documents cohabitent :
 | Bloc | Documents concernés |
 | --- | --- |
 | **BC01** — Stratégie SI | SWOT, Matrice de décision, Éco-conception |
-| **BC02** — Piloter des projets | Note de cadrage, RACI, Journal de décisions, PCA/PRA/Migration, RGPD, Grille |
+| **BC02** — Piloter des projets | Note de cadrage, Cahier des charges technique, RACI, Journal de décisions, PCA/PRA/Migration, RGPD, Grille |
 | **BC03** — Concevoir & développer | Plan de tests, RGPD, Éco-conception |
 | **BC05** — Big data & IA | MCD/Merise, Fiche OLTP & OLAP, OLTP, OLAP, RGPD, Souveraineté IA |
 | **Transverse** | Traçabilité, Grille, Trame de soutenance, Glossaire, Organisation du dépôt |
@@ -99,6 +100,7 @@ Trois types de documents cohabitent :
 ## Suivi de complétude *(à cocher au fil du projet)*
 
 - [ ] Note de cadrage rédigée
+- [ ] Cahier des charges technique rédigé (exigences fonctionnelles + non fonctionnelles)
 - [ ] RACI + organisation du dépôt en place
 - [ ] Audit de l'existant (avec SWOT)
 - [ ] MCD / MLD cible
