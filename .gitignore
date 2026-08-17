@@ -44,7 +44,7 @@ build/
 coverage/
 .next/
 
-# Bases de donnees locales
+# Bases de données locales
 *.db
 *.sqlite
 *.sqlite3
