@@ -1,0 +1,50 @@
+# Configuration locale et secrets
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# Editeurs et IDE
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*~
+
+# Fichiers systeme
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Fichiers temporaires et journaux
+*.log
+*.tmp
+*.temp
+*.bak
+~$*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node.js et front-end
+node_modules/
+dist/
+build/
+coverage/
+.next/
+
+# Bases de donnees locales
+*.db
+*.sqlite
+*.sqlite3
