@@ -116,12 +116,36 @@ CREATE INDEX idx_indicateur_chasseur ON INDICATEUR_PERFORMANCE(id_chasseur);
 -- Unicité intelligente du Secteur (gère les quartiers NULL)
 CREATE UNIQUE INDEX ux_secteur_ville_quartier ON SECTEUR (id_ville, COALESCE(quartier, ''));
 
--- Validation des emails
+-- Validation des formats de contact (Email & Téléphone international)
 ALTER TABLE PERSONNE ADD CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
+ALTER TABLE PERSONNE ADD CONSTRAINT chk_telephone_format CHECK (telephone ~ '^\+?[0-9\s\-\.()]{6,20}$');
 
--- Cohérence temporelle
+-- Validation du code postal (Format international permissif)
+ALTER TABLE SECTEUR ADD CONSTRAINT chk_code_postal CHECK (code_postal ~ '^[A-Za-z0-9\s-]{3,10}$');
+
+-- Cohérence temporelle et règles légales (Loi Hoguet = max 6 mois)
 ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_dates CHECK (date_fin > date_signature);
+ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_duree_max CHECK (date_fin <= date_signature + INTERVAL '6 months');
 ALTER TABLE ANNONCE ADD CONSTRAINT chk_annonce_dates CHECK (date_retrait IS NULL OR date_retrait >= date_publication);
+
+-- Cohérence des barèmes de commission
+ALTER TABLE BAREME ADD CONSTRAINT chk_bareme_dates CHECK (date_fin IS NULL OR date_fin > date_debut);
+ALTER TABLE TRANCHE_BAREME ADD CONSTRAINT chk_tranche_coherente CHECK (montant_max IS NULL OR montant_max > montant_min);
+ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_pieces_coherentes CHECK (nb_chambres_min IS NULL OR nb_pieces_min IS NULL OR nb_chambres_min <= nb_pieces_min);
+
+-- ==========================================
+-- TRIGGERS (Automatisation Métier)
+-- ==========================================
+CREATE OR REPLACE FUNCTION trg_update_mandat_fin() RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE MANDAT SET date_fin = NEW.nouvelle_date_fin WHERE id_mandat = NEW.id_mandat;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_renouvellement_mandat
+AFTER INSERT ON RENOUVELLEMENT_MANDAT
+FOR EACH ROW EXECUTE FUNCTION trg_update_mandat_fin();
 
 -- Montants et surfaces logiques
 ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_budget_max CHECK (budget_max > 0);

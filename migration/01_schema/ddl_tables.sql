@@ -18,7 +18,7 @@ CREATE TYPE enum_mode_signature AS ENUM ('en_agence', 'hors_etablissement', 'ele
 CREATE TYPE enum_statut_mandat AS ENUM ('actif', 'suspendu', 'termine', 'resilie');
 CREATE TYPE enum_type_bien AS ENUM ('appartement', 'maison', 'loft', 'villa', 'non_defini');
 CREATE TYPE enum_dpe AS ENUM ('A', 'B', 'C', 'D', 'E', 'F', 'G');
-CREATE TYPE enum_etat_attendu AS ENUM ('neuf', 'recent', 'ancien_renove', 'a_renover');
+CREATE TYPE enum_etat_bien AS ENUM ('neuf', 'recent', 'ancien_renove', 'a_renover');
 
 -- V3 : Alignement strict sur le dictionnaire
 CREATE TYPE enum_categorie_caract AS ENUM ('exterieur', 'stationnement', 'confort', 'environnement', 'accessibilite');
@@ -153,10 +153,11 @@ CREATE TABLE DEMANDE_VERSION (
     nb_salles_bain_min INT,
     nb_places_parking_min INT,
     dpe_max enum_dpe,
-    etat_attendu enum_etat_attendu,
+    etat_attendu enum_etat_bien,
     annee_construction_min INT,
     emmenagement_au_plus_tard DATE,
     dernier_etage_accepte BOOLEAN DEFAULT FALSE, -- V3 : Dernier étage
+    criteres_bruts TEXT, -- V4 : Conservation du texte d'origine pour traçabilité (Audit A03)
     est_courante BOOLEAN DEFAULT TRUE
 );
 
@@ -198,7 +199,7 @@ CREATE TABLE BIEN (
     type_chauffage enum_type_chauffage,
     dpe enum_dpe,
     ges enum_dpe,
-    etat enum_etat_attendu,
+    etat enum_etat_bien,
     charges_copropriete DECIMAL(10,2),
     taxe_fonciere DECIMAL(10,2),
     date_disponibilite DATE,
@@ -372,7 +373,15 @@ CREATE TABLE INDICATEUR_PERFORMANCE (
 );
 
 -- ==========================================
--- V3 : DOCUMENTATION (Règles métiers structurelles)
+-- VUES D'EXPLOITATION (Résolution A01)
 -- ==========================================
+CREATE VIEW v_mandat_etat AS
+SELECT *, (date_fin < CURRENT_DATE) AS est_expire 
+FROM MANDAT;
+
+-- ==========================================
+-- DOCUMENTATION (Règles métiers structurelles)
+-- ==========================================
+COMMENT ON COLUMN DEMANDE_VERSION.criteres_bruts IS 'Conserve le texte libre saisi par le client avant parsing (Traçabilité métier).';
 COMMENT ON COLUMN MANDAT.date_fin IS 'Unique source de vérité pour le statut du mandat. Doit être mise à jour par trigger lors d''un renouvellement.';
 COMMENT ON COLUMN RENOUVELLEMENT_MANDAT.nouvelle_date_fin IS 'Historique uniquement. Ne pas utiliser pour vérifier si le mandat est actif.';
