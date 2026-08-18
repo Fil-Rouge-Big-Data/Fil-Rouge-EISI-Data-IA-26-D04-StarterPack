@@ -1,6 +1,6 @@
 -- ============================================================
 -- SCRIPT DDL — Création du schéma cible (PostgreSQL)
--- Version SANS les clés étrangères (uniquement les tables et PK)
+-- V3 : Intégration des arbitrages métiers finaux
 -- ============================================================
 
 DROP SCHEMA IF EXISTS fil_rouge_cible CASCADE;
@@ -19,12 +19,24 @@ CREATE TYPE enum_statut_mandat AS ENUM ('actif', 'suspendu', 'termine', 'resilie
 CREATE TYPE enum_type_bien AS ENUM ('appartement', 'maison', 'loft', 'villa', 'non_defini');
 CREATE TYPE enum_dpe AS ENUM ('A', 'B', 'C', 'D', 'E', 'F', 'G');
 CREATE TYPE enum_etat_attendu AS ENUM ('neuf', 'recent', 'ancien_renove', 'a_renover');
-CREATE TYPE enum_categorie_caract AS ENUM ('interieur', 'exterieur', 'equipement', 'environnement');
+
+-- V3 : Alignement strict sur le dictionnaire
+CREATE TYPE enum_categorie_caract AS ENUM ('exterieur', 'stationnement', 'confort', 'environnement', 'accessibilite');
+
 CREATE TYPE enum_type_chauffage AS ENUM ('electrique', 'gaz', 'fioul', 'bois', 'pompe_a_chaleur');
 CREATE TYPE enum_suite_donnee AS ENUM ('en_attente', 'visite_planifiee', 'rejetee', 'offre_formulee');
 CREATE TYPE enum_type_commentaire AS ENUM ('note_interne', 'feedback_client', 'rapport_visite');
-CREATE TYPE enum_media_pj AS ENUM ('image', 'pdf', 'video', 'document');
-CREATE TYPE enum_emetteur_offre AS ENUM ('client', 'chasseur_pour_client');
+
+-- V3 : Ajout de l'audio selon les spécifications
+CREATE TYPE enum_media_pj AS ENUM ('image', 'pdf', 'video', 'document', 'audio');
+
+-- V3 : Les camps de l'offre (Séparation acheteur/vendeur)
+CREATE TYPE enum_camp_offre AS ENUM ('acheteur', 'vendeur');
+CREATE TYPE enum_auteur_saisie AS ENUM ('client', 'chasseur');
+
+-- V3 : Enumération pour l'émetteur d'annonce
+CREATE TYPE enum_type_emetteur_annonce AS ENUM ('agence', 'particulier', 'notaire', 'promoteur');
+
 CREATE TYPE enum_origine_decouverte AS ENUM ('chasseur', 'client_seul', 'tiers');
 CREATE TYPE enum_statut_offre AS ENUM ('en_cours', 'acceptee', 'refusee', 'caduque');
 CREATE TYPE enum_statut_compromis AS ENUM ('signe', 'reitere', 'caduc');
@@ -49,13 +61,14 @@ CREATE TABLE VILLE (
     id_ville SERIAL PRIMARY KEY,
     code_iso_pays VARCHAR(3) NOT NULL,
     nom VARCHAR(100) NOT NULL,
-    code_postal VARCHAR(20)
+    code_insee VARCHAR(5) -- V3 : Code Insee au lieu du Code Postal
 );
 
 CREATE TABLE SECTEUR (
     id_secteur SERIAL PRIMARY KEY,
     id_ville INT NOT NULL,
-    quartier VARCHAR(100)
+    quartier VARCHAR(100),
+    code_postal VARCHAR(20) -- V3 : Le Code Postal descend ici
 );
 
 -- ==========================================
@@ -109,6 +122,7 @@ CREATE TABLE MANDAT (
     id_mandat SERIAL PRIMARY KEY,
     id_demande INT NOT NULL,
     id_chasseur INT NOT NULL,
+    numero_registre VARCHAR(50), -- V3 : Loi Hoguet
     date_signature DATE NOT NULL,
     mode_signature enum_mode_signature,
     date_fin DATE NOT NULL,
@@ -142,6 +156,7 @@ CREATE TABLE DEMANDE_VERSION (
     etat_attendu enum_etat_attendu,
     annee_construction_min INT,
     emmenagement_au_plus_tard DATE,
+    dernier_etage_accepte BOOLEAN DEFAULT FALSE, -- V3 : Dernier étage
     est_courante BOOLEAN DEFAULT TRUE
 );
 
@@ -160,6 +175,7 @@ CREATE TABLE DEMANDE_SECTEUR (
 CREATE TABLE DEMANDE_CARACTERISTIQUE (
     id_version INT NOT NULL,
     id_caracteristique INT NOT NULL,
+    est_imperatif BOOLEAN DEFAULT TRUE, -- V3 : Souhaité vs Impératif
     PRIMARY KEY (id_version, id_caracteristique)
 );
 
@@ -199,7 +215,7 @@ CREATE TABLE ANNONCE (
     id_annonce SERIAL PRIMARY KEY,
     id_bien INT NOT NULL,
     source VARCHAR(100),
-    type_emetteur VARCHAR(50),
+    type_emetteur enum_type_emetteur_annonce, -- V3 : ENUM strict
     denomination_emetteur VARCHAR(100),
     contact_email VARCHAR(150),
     contact_telephone VARCHAR(20),
@@ -248,7 +264,8 @@ CREATE TABLE OFFRE_ACQUISITION (
     id_offre SERIAL PRIMARY KEY,
     id_proposition INT NOT NULL,
     id_offre_precedente INT,
-    emetteur enum_emetteur_offre,
+    camp enum_camp_offre,       -- V3 : Acheteur ou Vendeur
+    saisi_par enum_auteur_saisie, -- V3 : Client ou Chasseur
     origine_decouverte enum_origine_decouverte,
     montant DECIMAL(12,2) NOT NULL,
     date_signature DATE NOT NULL,
@@ -353,3 +370,9 @@ CREATE TABLE INDICATEUR_PERFORMANCE (
     part_exclusifs DECIMAL(5,2),
     nb_visites_moyen DECIMAL(5,2)
 );
+
+-- ==========================================
+-- V3 : DOCUMENTATION (Règles métiers structurelles)
+-- ==========================================
+COMMENT ON COLUMN MANDAT.date_fin IS 'Unique source de vérité pour le statut du mandat. Doit être mise à jour par trigger lors d''un renouvellement.';
+COMMENT ON COLUMN RENOUVELLEMENT_MANDAT.nouvelle_date_fin IS 'Historique uniquement. Ne pas utiliser pour vérifier si le mandat est actif.';

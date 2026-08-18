@@ -76,8 +76,6 @@ ALTER TABLE INDICATEUR_PERFORMANCE ADD CONSTRAINT fk_indicateur_chasseur FOREIGN
 CREATE INDEX idx_ville_pays ON VILLE(code_iso_pays);
 CREATE INDEX idx_secteur_ville ON SECTEUR(id_ville);
 CREATE INDEX idx_personne_ville ON PERSONNE(id_ville);
-CREATE INDEX idx_client_personne ON CLIENT(id_personne);
-CREATE INDEX idx_chasseur_personne ON CHASSEUR(id_personne);
 CREATE INDEX idx_demande_client ON DEMANDE(id_client);
 CREATE INDEX idx_affectation_demande ON AFFECTATION(id_demande);
 CREATE INDEX idx_affectation_chasseur ON AFFECTATION(id_chasseur);
@@ -86,7 +84,10 @@ CREATE INDEX idx_mandat_chasseur ON MANDAT(id_chasseur);
 CREATE INDEX idx_renouvellement_mandat ON RENOUVELLEMENT_MANDAT(id_mandat);
 CREATE INDEX idx_version_demande ON DEMANDE_VERSION(id_demande);
 CREATE INDEX idx_version_redacteur ON DEMANDE_VERSION(id_redacteur);
+CREATE INDEX idx_dsect_secteur ON DEMANDE_SECTEUR(id_secteur);
+CREATE INDEX idx_dcaract_caract ON DEMANDE_CARACTERISTIQUE(id_caracteristique);
 CREATE INDEX idx_bien_secteur ON BIEN(id_secteur);
+CREATE INDEX idx_bcaract_caract ON BIEN_CARACTERISTIQUE(id_caracteristique);
 CREATE INDEX idx_annonce_bien ON ANNONCE(id_bien);
 CREATE INDEX idx_proposition_version ON PROPOSITION(id_version);
 CREATE INDEX idx_proposition_annonce ON PROPOSITION(id_annonce);
@@ -119,7 +120,7 @@ CREATE UNIQUE INDEX ux_secteur_ville_quartier ON SECTEUR (id_ville, COALESCE(qua
 ALTER TABLE PERSONNE ADD CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
 
 -- Cohérence temporelle
-ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_dates CHECK (date_fin >= date_signature);
+ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_dates CHECK (date_fin > date_signature);
 ALTER TABLE ANNONCE ADD CONSTRAINT chk_annonce_dates CHECK (date_retrait IS NULL OR date_retrait >= date_publication);
 
 -- Montants et surfaces logiques
