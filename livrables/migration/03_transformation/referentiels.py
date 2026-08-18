@@ -64,6 +64,9 @@ MODULATEURS = ("si possible", "appreciee", "apprecie")
 # qualitatif devient une CARACTERISTIQUE(libelle, categorie) du MCD cible : le DDL
 # ne prévoit aucun champ texte résiduel sur DEMANDE_VERSION, `criteres_bruts`
 # étant réservé à la reprise (COMMENT de 01_schema/ddl_tables.sql).
+# L'ORDRE de ce dictionnaire fixe les id_caracteristique attribués à la reprise
+# (1 → 19) : ne pas le réordonner, ni y insérer une entrée ailleurs qu'à la fin,
+# une fois la cible chargée — les liaisons DEMANDE_CARACTERISTIQUE s'y réfèrent.
 CARACTERISTIQUES = {
     "balcon": ("Balcon", "exterieur"),
     "terrasse": ("Terrasse", "exterieur"),
