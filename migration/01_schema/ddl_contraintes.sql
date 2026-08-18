@@ -1,8 +1,16 @@
 -- ============================================================
 -- SCRIPT DDL — Ajout des Clés Étrangères (FK), Index et Contraintes (CHECK)
+-- V5 : Version exhaustive avec btree_gist, exclusion et transactions
 -- ============================================================
 
 SET search_path TO fil_rouge_cible;
+
+BEGIN;
+
+-- ==========================================
+-- 0. EXTENSIONS POUR RÈGLES AVANCÉES
+-- ==========================================
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 -- ==========================================
 -- 1. CLÉS ÉTRANGÈRES (FOREIGN KEYS)
@@ -113,8 +121,14 @@ CREATE INDEX idx_indicateur_chasseur ON INDICATEUR_PERFORMANCE(id_chasseur);
 -- 3. CONTRAINTES DE VALIDATION (Data Quality & Règles Métier)
 -- ==========================================
 
--- Unicité intelligente du Secteur (gère les quartiers NULL)
+-- Unicité métier et structurelle intelligente
 CREATE UNIQUE INDEX ux_secteur_ville_quartier ON SECTEUR (id_ville, COALESCE(quartier, ''));
+ALTER TABLE VILLE ADD CONSTRAINT uq_ville_insee UNIQUE (code_iso_pays, code_insee);
+ALTER TABLE MANDAT ADD CONSTRAINT uq_mandat_registre UNIQUE (numero_registre);
+ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT uq_version UNIQUE (id_demande, no_version);
+CREATE UNIQUE INDEX ux_version_courante ON DEMANDE_VERSION (id_demande) WHERE est_courante;
+CREATE UNIQUE INDEX ux_caracteristique_libelle ON CARACTERISTIQUE (lower(libelle));
+ALTER TABLE INDICATEUR_PERFORMANCE ADD CONSTRAINT uq_indicateur_date UNIQUE (id_chasseur, date_calcul);
 
 -- Validation des formats de contact (Email & Téléphone international)
 ALTER TABLE PERSONNE ADD CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
@@ -125,29 +139,44 @@ ALTER TABLE SECTEUR ADD CONSTRAINT chk_code_postal CHECK (code_postal ~ '^[A-Za-
 
 -- Cohérence temporelle et règles légales (Loi Hoguet = max 6 mois)
 ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_dates CHECK (date_fin > date_signature);
-ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_duree_max CHECK (date_fin <= date_signature + INTERVAL '6 months');
+ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_duree_max CHECK (date_fin <= date_debut_periode + INTERVAL '6 months');
+ALTER TABLE RENOUVELLEMENT_MANDAT ADD CONSTRAINT chk_renouvellement_date CHECK (nouvelle_date_fin > date_renouvellement);
 ALTER TABLE ANNONCE ADD CONSTRAINT chk_annonce_dates CHECK (date_retrait IS NULL OR date_retrait >= date_publication);
 
--- Cohérence des barèmes de commission
+-- Cohérence des barèmes de commission et non-chevauchement
 ALTER TABLE BAREME ADD CONSTRAINT chk_bareme_dates CHECK (date_fin IS NULL OR date_fin > date_debut);
 ALTER TABLE TRANCHE_BAREME ADD CONSTRAINT chk_tranche_coherente CHECK (montant_max IS NULL OR montant_max > montant_min);
+ALTER TABLE TRANCHE_BAREME ADD CONSTRAINT chk_taux_valide CHECK (taux >= 0 AND taux <= 100);
 ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_pieces_coherentes CHECK (nb_chambres_min IS NULL OR nb_pieces_min IS NULL OR nb_chambres_min <= nb_pieces_min);
+
+-- Exclusion des chevauchements de tranches et de barèmes (GIST)
+ALTER TABLE TRANCHE_BAREME ADD CONSTRAINT excl_tranche_bareme EXCLUDE USING gist (id_bareme WITH =, numrange(montant_min, montant_max) WITH &&);
+ALTER TABLE BAREME ADD CONSTRAINT excl_bareme_periode EXCLUDE USING gist (id_chasseur WITH =, daterange(date_debut, COALESCE(date_fin, 'infinity'::date)) WITH &&);
 
 -- ==========================================
 -- TRIGGERS (Automatisation Métier)
 -- ==========================================
-CREATE OR REPLACE FUNCTION trg_update_mandat_fin() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION trg_update_mandat_fin() RETURNS TRIGGER 
+  LANGUAGE plpgsql
+  SET search_path = fil_rouge_cible
+AS $$
 BEGIN
-    UPDATE MANDAT SET date_fin = NEW.nouvelle_date_fin WHERE id_mandat = NEW.id_mandat;
+    UPDATE MANDAT 
+    SET date_debut_periode = NEW.date_renouvellement,
+        date_fin = NEW.nouvelle_date_fin 
+    WHERE id_mandat = NEW.id_mandat;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
+DROP TRIGGER IF EXISTS trg_renouvellement_mandat ON RENOUVELLEMENT_MANDAT;
 CREATE TRIGGER trg_renouvellement_mandat
-AFTER INSERT ON RENOUVELLEMENT_MANDAT
+AFTER INSERT OR UPDATE ON RENOUVELLEMENT_MANDAT
 FOR EACH ROW EXECUTE FUNCTION trg_update_mandat_fin();
 
 -- Montants et surfaces logiques
 ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_budget_max CHECK (budget_max > 0);
 ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_surface_min CHECK (surface_min > 0);
 ALTER TABLE OFFRE_ACQUISITION ADD CONSTRAINT chk_montant_offre CHECK (montant > 0);
+
+COMMIT;
