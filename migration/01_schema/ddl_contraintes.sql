@@ -1,8 +1,12 @@
 -- ============================================================
--- SCRIPT DDL — Ajout des Clés Étrangères (FK)
--- Permet de séparer la création des tables et l'ajout des contraintes
+-- SCRIPT DDL — Ajout des Clés Étrangères (FK), Index et Contraintes (CHECK)
 -- ============================================================
 
+SET search_path TO fil_rouge_cible;
+
+-- ==========================================
+-- 1. CLÉS ÉTRANGÈRES (FOREIGN KEYS)
+-- ==========================================
 ALTER TABLE VILLE ADD CONSTRAINT fk_ville_pays FOREIGN KEY (code_iso_pays) REFERENCES PAYS(code_iso);
 ALTER TABLE SECTEUR ADD CONSTRAINT fk_secteur_ville FOREIGN KEY (id_ville) REFERENCES VILLE(id_ville);
 
@@ -65,3 +69,60 @@ ALTER TABLE FACTURE ADD CONSTRAINT fk_facture_remuneration FOREIGN KEY (id_remun
 ALTER TABLE PAIEMENT ADD CONSTRAINT fk_paiement_facture FOREIGN KEY (id_facture) REFERENCES FACTURE(id_facture);
 
 ALTER TABLE INDICATEUR_PERFORMANCE ADD CONSTRAINT fk_indicateur_chasseur FOREIGN KEY (id_chasseur) REFERENCES CHASSEUR(id_personne);
+
+-- ==========================================
+-- 2. INDEX SUR LES CLÉS ÉTRANGÈRES (Performance)
+-- ==========================================
+CREATE INDEX idx_ville_pays ON VILLE(code_iso_pays);
+CREATE INDEX idx_secteur_ville ON SECTEUR(id_ville);
+CREATE INDEX idx_personne_ville ON PERSONNE(id_ville);
+CREATE INDEX idx_client_personne ON CLIENT(id_personne);
+CREATE INDEX idx_chasseur_personne ON CHASSEUR(id_personne);
+CREATE INDEX idx_demande_client ON DEMANDE(id_client);
+CREATE INDEX idx_affectation_demande ON AFFECTATION(id_demande);
+CREATE INDEX idx_affectation_chasseur ON AFFECTATION(id_chasseur);
+CREATE INDEX idx_mandat_demande ON MANDAT(id_demande);
+CREATE INDEX idx_mandat_chasseur ON MANDAT(id_chasseur);
+CREATE INDEX idx_renouvellement_mandat ON RENOUVELLEMENT_MANDAT(id_mandat);
+CREATE INDEX idx_version_demande ON DEMANDE_VERSION(id_demande);
+CREATE INDEX idx_version_redacteur ON DEMANDE_VERSION(id_redacteur);
+CREATE INDEX idx_bien_secteur ON BIEN(id_secteur);
+CREATE INDEX idx_annonce_bien ON ANNONCE(id_bien);
+CREATE INDEX idx_proposition_version ON PROPOSITION(id_version);
+CREATE INDEX idx_proposition_annonce ON PROPOSITION(id_annonce);
+CREATE INDEX idx_commentaire_proposition ON COMMENTAIRE(id_proposition);
+CREATE INDEX idx_commentaire_auteur ON COMMENTAIRE(id_auteur);
+CREATE INDEX idx_piece_commentaire ON PIECE_JOINTE(id_commentaire);
+CREATE INDEX idx_visite_proposition ON VISITE(id_proposition);
+CREATE INDEX idx_visite_visiteur ON VISITE(id_visiteur);
+CREATE INDEX idx_offre_proposition ON OFFRE_ACQUISITION(id_proposition);
+CREATE INDEX idx_offre_precedente ON OFFRE_ACQUISITION(id_offre_precedente);
+CREATE INDEX idx_compromis_offre ON COMPROMIS(id_offre);
+CREATE INDEX idx_compromis_notaire ON COMPROMIS(id_notaire);
+CREATE INDEX idx_clause_compromis ON CLAUSE_SUSPENSIVE(id_compromis);
+CREATE INDEX idx_acte_compromis ON ACTE(id_compromis);
+CREATE INDEX idx_bareme_chasseur ON BAREME(id_chasseur);
+CREATE INDEX idx_tranche_bareme ON TRANCHE_BAREME(id_bareme);
+CREATE INDEX idx_remuneration_acte ON REMUNERATION(id_acte);
+CREATE INDEX idx_facture_remuneration ON FACTURE(id_remuneration);
+CREATE INDEX idx_paiement_facture ON PAIEMENT(id_facture);
+CREATE INDEX idx_indicateur_chasseur ON INDICATEUR_PERFORMANCE(id_chasseur);
+
+-- ==========================================
+-- 3. CONTRAINTES DE VALIDATION (Data Quality & Règles Métier)
+-- ==========================================
+
+-- Unicité intelligente du Secteur (gère les quartiers NULL)
+CREATE UNIQUE INDEX ux_secteur_ville_quartier ON SECTEUR (id_ville, COALESCE(quartier, ''));
+
+-- Validation des emails
+ALTER TABLE PERSONNE ADD CONSTRAINT chk_email_format CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$');
+
+-- Cohérence temporelle
+ALTER TABLE MANDAT ADD CONSTRAINT chk_mandat_dates CHECK (date_fin >= date_signature);
+ALTER TABLE ANNONCE ADD CONSTRAINT chk_annonce_dates CHECK (date_retrait IS NULL OR date_retrait >= date_publication);
+
+-- Montants et surfaces logiques
+ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_budget_max CHECK (budget_max > 0);
+ALTER TABLE DEMANDE_VERSION ADD CONSTRAINT chk_surface_min CHECK (surface_min > 0);
+ALTER TABLE OFFRE_ACQUISITION ADD CONSTRAINT chk_montant_offre CHECK (montant > 0);

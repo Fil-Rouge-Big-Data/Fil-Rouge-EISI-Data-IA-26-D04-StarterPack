@@ -3,34 +3,37 @@
 -- Version SANS les clés étrangères (uniquement les tables et PK)
 -- ============================================================
 
-DROP SCHEMA IF EXISTS public CASCADE;
-CREATE SCHEMA public;
+DROP SCHEMA IF EXISTS fil_rouge_cible CASCADE;
+CREATE SCHEMA fil_rouge_cible;
+SET search_path TO fil_rouge_cible;
 
 -- ==========================================
 -- TYPES ENUM (PostgreSQL spécifique)
+-- Format : snake_case, ASCII, sans accent
 -- ==========================================
-CREATE TYPE enum_origine_client AS ENUM ('Site Web', 'Bouche à oreille', 'Autre');
-CREATE TYPE enum_canal_demande AS ENUM ('formulaire en ligne', 'téléphone', 'recommandation');
-CREATE TYPE enum_statut_affectation AS ENUM ('proposée', 'acceptée', 'refusée', 'expirée');
-CREATE TYPE enum_mode_signature AS ENUM ('en agence', 'hors établissement', 'électronique à distance');
-CREATE TYPE enum_statut_mandat AS ENUM ('actif', 'suspendu', 'termine', 'resilie', 'expire');
-CREATE TYPE enum_type_bien AS ENUM ('appartement', 'maison', 'loft', 'villa', 'non defini');
+CREATE TYPE enum_origine_client AS ENUM ('site_web', 'bouche_a_oreille', 'autre');
+CREATE TYPE enum_canal_demande AS ENUM ('formulaire_en_ligne', 'telephone', 'recommandation');
+CREATE TYPE enum_statut_affectation AS ENUM ('proposee', 'acceptee', 'refusee', 'expiree');
+CREATE TYPE enum_mode_signature AS ENUM ('en_agence', 'hors_etablissement', 'electronique_a_distance');
+CREATE TYPE enum_statut_mandat AS ENUM ('actif', 'suspendu', 'termine', 'resilie');
+CREATE TYPE enum_type_bien AS ENUM ('appartement', 'maison', 'loft', 'villa', 'non_defini');
 CREATE TYPE enum_dpe AS ENUM ('A', 'B', 'C', 'D', 'E', 'F', 'G');
-CREATE TYPE enum_etat_attendu AS ENUM ('neuf', 'récent', 'ancien rénové', 'travaux acceptés');
-CREATE TYPE enum_categorie_caract AS ENUM ('intérieur', 'extérieur', 'équipement', 'environnement');
-CREATE TYPE enum_type_chauffage AS ENUM ('électrique', 'gaz', 'fioul', 'bois', 'pompe à chaleur');
-CREATE TYPE enum_suite_donnee AS ENUM ('en attente', 'visite planifiée', 'rejetée', 'offre formulée');
-CREATE TYPE enum_type_commentaire AS ENUM ('note interne', 'feedback client', 'rapport visite');
+CREATE TYPE enum_etat_attendu AS ENUM ('neuf', 'recent', 'ancien_renove', 'a_renover');
+CREATE TYPE enum_categorie_caract AS ENUM ('interieur', 'exterieur', 'equipement', 'environnement');
+CREATE TYPE enum_type_chauffage AS ENUM ('electrique', 'gaz', 'fioul', 'bois', 'pompe_a_chaleur');
+CREATE TYPE enum_suite_donnee AS ENUM ('en_attente', 'visite_planifiee', 'rejetee', 'offre_formulee');
+CREATE TYPE enum_type_commentaire AS ENUM ('note_interne', 'feedback_client', 'rapport_visite');
 CREATE TYPE enum_media_pj AS ENUM ('image', 'pdf', 'video', 'document');
-CREATE TYPE enum_emetteur_offre AS ENUM ('client', 'chasseur pour client');
+CREATE TYPE enum_emetteur_offre AS ENUM ('client', 'chasseur_pour_client');
 CREATE TYPE enum_origine_decouverte AS ENUM ('chasseur', 'client_seul', 'tiers');
-CREATE TYPE enum_statut_offre AS ENUM ('en cours', 'acceptée', 'refusée', 'caduque');
-CREATE TYPE enum_statut_compromis AS ENUM ('signé', 'réitéré', 'caduc');
-CREATE TYPE enum_motif_caducite AS ENUM ('refus prêt', 'droit préemption', 'rétractation acheteur', 'autre');
-CREATE TYPE enum_type_clause AS ENUM ('obtention prêt', 'permis construire', 'vente précédent bien', 'autre');
-CREATE TYPE enum_statut_clause AS ENUM ('en attente', 'levée', 'défaillie');
-CREATE TYPE enum_statut_facture AS ENUM ('émise', 'payée', 'annulée', 'impayée');
-CREATE TYPE enum_moyen_paiement AS ENUM ('virement', 'chèque', 'carte bancaire');
+CREATE TYPE enum_statut_offre AS ENUM ('en_cours', 'acceptee', 'refusee', 'caduque');
+CREATE TYPE enum_statut_compromis AS ENUM ('signe', 'reitere', 'caduc');
+CREATE TYPE enum_motif_caducite AS ENUM ('refus_pret', 'droit_preemption', 'retractation_acheteur', 'autre');
+CREATE TYPE enum_type_clause AS ENUM ('obtention_pret', 'permis_construire', 'vente_precedent_bien', 'autre');
+CREATE TYPE enum_statut_clause AS ENUM ('en_attente', 'levee', 'defaillie');
+CREATE TYPE enum_statut_facture AS ENUM ('emise', 'verifiee', 'payee', 'annulee', 'impayee');
+CREATE TYPE enum_statut_paiement AS ENUM ('programme', 'paye');
+CREATE TYPE enum_moyen_paiement AS ENUM ('virement', 'cheque', 'carte_bancaire');
 
 -- ==========================================
 -- GÉOGRAPHIE
@@ -65,7 +68,7 @@ CREATE TABLE PERSONNE (
     prenom VARCHAR(100) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
     telephone VARCHAR(20),
-    date_creation TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    date_creation TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     date_consentement DATE,
     date_anonymisation DATE
 );
@@ -96,9 +99,9 @@ CREATE TABLE AFFECTATION (
     id_affectation SERIAL PRIMARY KEY,
     id_demande INT NOT NULL,
     id_chasseur INT NOT NULL,
-    date_proposition TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    statut enum_statut_affectation DEFAULT 'proposée',
-    date_reponse TIMESTAMP,
+    date_proposition TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    statut enum_statut_affectation DEFAULT 'proposee',
+    date_reponse TIMESTAMPTZ,
     motif_refus VARCHAR(255)
 );
 
@@ -125,7 +128,7 @@ CREATE TABLE DEMANDE_VERSION (
     id_demande INT NOT NULL,
     id_redacteur INT NOT NULL,
     no_version INT NOT NULL DEFAULT 1,
-    date_modification TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    date_modification TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     motif VARCHAR(255),
     type_bien enum_type_bien,
     budget_max DECIMAL(12,2),
@@ -212,9 +215,9 @@ CREATE TABLE PROPOSITION (
     id_proposition SERIAL PRIMARY KEY,
     id_version INT NOT NULL,
     id_annonce INT NOT NULL,
-    date_proposition TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    date_proposition TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     rang_pertinence INT,
-    suite_donnee enum_suite_donnee DEFAULT 'en attente',
+    suite_donnee enum_suite_donnee DEFAULT 'en_attente',
     motif_ecart TEXT
 );
 
@@ -224,7 +227,7 @@ CREATE TABLE COMMENTAIRE (
     id_auteur INT NOT NULL,
     type enum_type_commentaire,
     contenu TEXT NOT NULL,
-    date_redaction TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    date_redaction TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE PIECE_JOINTE (
@@ -251,7 +254,7 @@ CREATE TABLE OFFRE_ACQUISITION (
     date_signature DATE NOT NULL,
     date_transmission DATE,
     date_validite DATE,
-    statut enum_statut_offre DEFAULT 'en cours',
+    statut enum_statut_offre DEFAULT 'en_cours',
     date_reponse DATE
 );
 
@@ -274,7 +277,7 @@ CREATE TABLE COMPROMIS (
     depot_garantie DECIMAL(12,2),
     sequestre VARCHAR(100),
     date_acte_prevue DATE,
-    statut enum_statut_compromis DEFAULT 'signé',
+    statut enum_statut_compromis DEFAULT 'signe',
     motif_caducite enum_motif_caducite
 );
 
@@ -284,7 +287,7 @@ CREATE TABLE CLAUSE_SUSPENSIVE (
     type_clause enum_type_clause,
     description TEXT,
     date_butoir DATE,
-    statut enum_statut_clause DEFAULT 'en attente'
+    statut enum_statut_clause DEFAULT 'en_attente'
 );
 
 CREATE TABLE ACTE (
@@ -320,7 +323,7 @@ CREATE TABLE REMUNERATION (
     id_acte INT NOT NULL,
     montant DECIMAL(12,2) NOT NULL,
     taux_applique DECIMAL(5,2),
-    date_calcul TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    date_calcul TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE FACTURE (
@@ -328,7 +331,7 @@ CREATE TABLE FACTURE (
     id_remuneration INT NOT NULL,
     numero VARCHAR(50) UNIQUE NOT NULL,
     date_emission DATE NOT NULL,
-    statut enum_statut_facture DEFAULT 'émise'
+    statut enum_statut_facture DEFAULT 'emise'
 );
 
 CREATE TABLE PAIEMENT (
@@ -337,7 +340,7 @@ CREATE TABLE PAIEMENT (
     date_paiement DATE NOT NULL,
     montant DECIMAL(12,2) NOT NULL,
     moyen enum_moyen_paiement,
-    statut enum_statut_facture
+    statut enum_statut_paiement
 );
 
 CREATE TABLE INDICATEUR_PERFORMANCE (
