@@ -1,0 +1,382 @@
+-- ============================================================
+-- SCRIPT DDL — Création du schéma cible (PostgreSQL)
+-- V5 : Intégration exhaustive des revues de code & exigences
+-- ============================================================
+
+DROP SCHEMA IF EXISTS fil_rouge_cible CASCADE;
+CREATE SCHEMA fil_rouge_cible;
+SET search_path TO fil_rouge_cible;
+
+BEGIN;
+
+-- ==========================================
+-- TYPES ENUM (PostgreSQL spécifique)
+-- Format : snake_case, ASCII, sans accent
+-- ==========================================
+CREATE TYPE enum_origine_client AS ENUM ('site_web', 'bouche_a_oreille', 'autre');
+CREATE TYPE enum_canal_demande AS ENUM ('formulaire_en_ligne', 'telephone', 'recommandation');
+CREATE TYPE enum_statut_affectation AS ENUM ('proposee', 'acceptee', 'refusee', 'expiree');
+CREATE TYPE enum_mode_signature AS ENUM ('en_agence', 'hors_etablissement', 'electronique_a_distance');
+CREATE TYPE enum_statut_mandat AS ENUM ('actif', 'suspendu', 'termine', 'resilie');
+CREATE TYPE enum_type_bien AS ENUM ('appartement', 'maison', 'loft', 'villa', 'non_defini');
+CREATE TYPE enum_dpe AS ENUM ('A', 'B', 'C', 'D', 'E', 'F', 'G');
+CREATE TYPE enum_etat_bien AS ENUM ('neuf', 'recent', 'ancien_renove', 'a_renover');
+CREATE TYPE enum_categorie_caract AS ENUM ('exterieur', 'stationnement', 'confort', 'environnement', 'accessibilite');
+CREATE TYPE enum_type_chauffage AS ENUM ('electrique', 'gaz', 'fioul', 'bois', 'pompe_a_chaleur');
+CREATE TYPE enum_suite_donnee AS ENUM ('en_attente', 'visite_planifiee', 'rejetee', 'offre_formulee');
+CREATE TYPE enum_type_commentaire AS ENUM ('note_interne', 'feedback_client', 'rapport_visite');
+CREATE TYPE enum_media_pj AS ENUM ('image', 'pdf', 'video', 'document', 'audio');
+CREATE TYPE enum_camp_offre AS ENUM ('acheteur', 'vendeur');
+CREATE TYPE enum_auteur_saisie AS ENUM ('client', 'chasseur');
+CREATE TYPE enum_type_emetteur_annonce AS ENUM ('agence', 'particulier', 'notaire', 'promoteur');
+CREATE TYPE enum_origine_decouverte AS ENUM ('chasseur', 'client_seul', 'tiers');
+CREATE TYPE enum_statut_offre AS ENUM ('en_cours', 'acceptee', 'refusee', 'caduque');
+CREATE TYPE enum_statut_compromis AS ENUM ('signe', 'reitere', 'caduc');
+CREATE TYPE enum_motif_caducite AS ENUM ('refus_pret', 'droit_preemption', 'retractation_acheteur', 'autre');
+CREATE TYPE enum_type_clause AS ENUM ('obtention_pret', 'permis_construire', 'vente_precedent_bien', 'autre');
+CREATE TYPE enum_statut_clause AS ENUM ('en_attente', 'levee', 'defaillie');
+CREATE TYPE enum_statut_facture AS ENUM ('emise', 'verifiee', 'payee', 'annulee', 'impayee');
+CREATE TYPE enum_statut_paiement AS ENUM ('programme', 'paye');
+CREATE TYPE enum_moyen_paiement AS ENUM ('virement', 'cheque', 'carte_bancaire');
+
+-- ==========================================
+-- GÉOGRAPHIE
+-- ==========================================
+CREATE TABLE PAYS (
+    code_iso VARCHAR(3) PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    devise VARCHAR(10),
+    langue_defaut VARCHAR(10)
+);
+
+CREATE TABLE VILLE (
+    id_ville SERIAL PRIMARY KEY,
+    code_iso_pays VARCHAR(3) NOT NULL,
+    nom VARCHAR(100) NOT NULL,
+    code_insee VARCHAR(5) NOT NULL
+);
+
+CREATE TABLE SECTEUR (
+    id_secteur SERIAL PRIMARY KEY,
+    id_ville INT NOT NULL,
+    quartier VARCHAR(100),
+    code_postal VARCHAR(20)
+);
+
+-- ==========================================
+-- ACTEURS
+-- ==========================================
+CREATE TABLE PERSONNE (
+    id_personne SERIAL PRIMARY KEY,
+    id_ville INT,
+    nom VARCHAR(100) NOT NULL,
+    prenom VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE NOT NULL,
+    telephone VARCHAR(20),
+    date_creation TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    date_consentement DATE,
+    date_anonymisation DATE
+);
+
+CREATE TABLE CLIENT (
+    id_personne INT PRIMARY KEY,
+    origine enum_origine_client,
+    date_premier_contact DATE
+);
+
+CREATE TABLE CHASSEUR (
+    id_personne INT PRIMARY KEY,
+    date_entree DATE NOT NULL,
+    en_activite BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- ==========================================
+-- DEMANDE ET MANDAT
+-- ==========================================
+CREATE TABLE DEMANDE (
+    id_demande SERIAL PRIMARY KEY,
+    id_client INT NOT NULL,
+    date_depot DATE NOT NULL,
+    canal enum_canal_demande
+);
+
+CREATE TABLE AFFECTATION (
+    id_affectation SERIAL PRIMARY KEY,
+    id_demande INT NOT NULL,
+    id_chasseur INT NOT NULL,
+    date_proposition TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    statut enum_statut_affectation NOT NULL DEFAULT 'proposee',
+    date_reponse TIMESTAMPTZ,
+    motif_refus VARCHAR(255)
+);
+
+CREATE TABLE MANDAT (
+    id_mandat SERIAL PRIMARY KEY,
+    id_demande INT NOT NULL,
+    id_chasseur INT NOT NULL,
+    numero_registre VARCHAR(50),
+    date_signature DATE NOT NULL,
+    date_debut_periode DATE NOT NULL DEFAULT CURRENT_DATE,
+    mode_signature enum_mode_signature,
+    date_fin DATE NOT NULL,
+    exclusif BOOLEAN NOT NULL DEFAULT FALSE,
+    statut enum_statut_mandat NOT NULL DEFAULT 'actif'
+);
+
+CREATE TABLE RENOUVELLEMENT_MANDAT (
+    id_renouvellement SERIAL PRIMARY KEY,
+    id_mandat INT NOT NULL,
+    date_renouvellement DATE NOT NULL,
+    nouvelle_date_fin DATE NOT NULL
+);
+
+CREATE TABLE DEMANDE_VERSION (
+    id_version SERIAL PRIMARY KEY,
+    id_demande INT NOT NULL,
+    id_redacteur INT NOT NULL,
+    no_version INT NOT NULL,
+    date_modification TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    motif VARCHAR(255),
+    type_bien enum_type_bien,
+    budget_max DECIMAL(12,2),
+    surface_min INT,
+    surface_terrain_min INT,
+    nb_pieces_min INT,
+    nb_chambres_min INT,
+    nb_salles_bain_min INT,
+    nb_places_parking_min INT,
+    dpe_max enum_dpe,
+    etat_attendu enum_etat_bien,
+    annee_construction_min INT,
+    emmenagement_au_plus_tard DATE,
+    dernier_etage_exige BOOLEAN NOT NULL DEFAULT FALSE,
+    criteres_bruts TEXT,
+    est_courante BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE CARACTERISTIQUE (
+    id_caracteristique SERIAL PRIMARY KEY,
+    libelle VARCHAR(100) NOT NULL,
+    categorie enum_categorie_caract
+);
+
+CREATE TABLE DEMANDE_SECTEUR (
+    id_version INT NOT NULL,
+    id_secteur INT NOT NULL,
+    PRIMARY KEY (id_version, id_secteur)
+);
+
+CREATE TABLE DEMANDE_CARACTERISTIQUE (
+    id_version INT NOT NULL,
+    id_caracteristique INT NOT NULL,
+    est_imperatif BOOLEAN NOT NULL DEFAULT TRUE,
+    PRIMARY KEY (id_version, id_caracteristique)
+);
+
+-- ==========================================
+-- BIENS ET ANNONCES
+-- ==========================================
+CREATE TABLE BIEN (
+    id_bien SERIAL PRIMARY KEY,
+    id_secteur INT NOT NULL,
+    reference_interne VARCHAR(50),
+    type_bien enum_type_bien,
+    surface_habitable DECIMAL(8,2),
+    surface_terrain DECIMAL(8,2),
+    nb_pieces INT,
+    nb_chambres INT,
+    nb_salles_bain INT,
+    nb_places_parking INT,
+    etage INT,
+    annee_construction INT,
+    type_chauffage enum_type_chauffage,
+    dpe enum_dpe,
+    ges enum_dpe,
+    etat enum_etat_bien,
+    charges_copropriete DECIMAL(10,2),
+    taxe_fonciere DECIMAL(10,2),
+    date_disponibilite DATE,
+    adresse VARCHAR(255)
+);
+
+CREATE TABLE BIEN_CARACTERISTIQUE (
+    id_bien INT NOT NULL,
+    id_caracteristique INT NOT NULL,
+    PRIMARY KEY (id_bien, id_caracteristique)
+);
+
+CREATE TABLE ANNONCE (
+    id_annonce SERIAL PRIMARY KEY,
+    id_bien INT NOT NULL,
+    source VARCHAR(100),
+    type_emetteur enum_type_emetteur_annonce,
+    denomination_emetteur VARCHAR(100),
+    contact_email VARCHAR(150),
+    contact_telephone VARCHAR(20),
+    prix_affiche DECIMAL(12,2),
+    date_publication DATE,
+    date_retrait DATE
+);
+
+-- ==========================================
+-- PROPOSITION, VISITES, ET OFFRES
+-- ==========================================
+CREATE TABLE PROPOSITION (
+    id_proposition SERIAL PRIMARY KEY,
+    id_version INT NOT NULL,
+    id_annonce INT NOT NULL,
+    date_proposition TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    rang_pertinence INT,
+    suite_donnee enum_suite_donnee NOT NULL DEFAULT 'en_attente',
+    motif_ecart TEXT
+);
+
+CREATE TABLE COMMENTAIRE (
+    id_commentaire SERIAL PRIMARY KEY,
+    id_proposition INT NOT NULL,
+    id_auteur INT NOT NULL,
+    type enum_type_commentaire,
+    contenu TEXT NOT NULL,
+    date_redaction TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE PIECE_JOINTE (
+    id_piece SERIAL PRIMARY KEY,
+    id_commentaire INT NOT NULL,
+    media enum_media_pj,
+    uri VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE VISITE (
+    id_visite SERIAL PRIMARY KEY,
+    id_proposition INT NOT NULL,
+    id_visiteur INT NOT NULL,
+    date_visite DATE NOT NULL
+);
+
+CREATE TABLE OFFRE_ACQUISITION (
+    id_offre SERIAL PRIMARY KEY,
+    id_proposition INT NOT NULL,
+    id_offre_precedente INT,
+    camp enum_camp_offre,
+    saisi_par enum_auteur_saisie,
+    origine_decouverte enum_origine_decouverte,
+    montant DECIMAL(12,2) NOT NULL,
+    date_signature DATE NOT NULL,
+    date_transmission DATE,
+    date_validite DATE,
+    statut enum_statut_offre NOT NULL DEFAULT 'en_cours',
+    date_reponse DATE
+);
+
+-- ==========================================
+-- COMPROMIS ET ACTES (TUNNEL DE VENTE)
+-- ==========================================
+CREATE TABLE NOTAIRE (
+    id_notaire SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    etude VARCHAR(150),
+    email VARCHAR(150)
+);
+
+CREATE TABLE COMPROMIS (
+    id_compromis SERIAL PRIMARY KEY,
+    id_offre INT NOT NULL,
+    id_notaire INT NOT NULL,
+    date_signature DATE NOT NULL,
+    fin_retractation DATE,
+    depot_garantie DECIMAL(12,2),
+    sequestre VARCHAR(100),
+    date_acte_prevue DATE,
+    statut enum_statut_compromis NOT NULL DEFAULT 'signe',
+    motif_caducite enum_motif_caducite
+);
+
+CREATE TABLE CLAUSE_SUSPENSIVE (
+    id_clause SERIAL PRIMARY KEY,
+    id_compromis INT NOT NULL,
+    type_clause enum_type_clause,
+    description TEXT,
+    date_butoir DATE,
+    statut enum_statut_clause NOT NULL DEFAULT 'en_attente'
+);
+
+CREATE TABLE ACTE (
+    id_acte SERIAL PRIMARY KEY,
+    id_compromis INT NOT NULL,
+    date_signature DATE NOT NULL,
+    montant_vente DECIMAL(12,2) NOT NULL,
+    honoraires_fixe DECIMAL(10,2),
+    honoraires_taux DECIMAL(5,2),
+    honoraires_total DECIMAL(10,2)
+);
+
+-- ==========================================
+-- RÉMUNÉRATION ET PERFORMANCE
+-- ==========================================
+CREATE TABLE BAREME (
+    id_bareme SERIAL PRIMARY KEY,
+    id_chasseur INT NOT NULL,
+    date_debut DATE NOT NULL,
+    date_fin DATE
+);
+
+CREATE TABLE TRANCHE_BAREME (
+    id_tranche SERIAL PRIMARY KEY,
+    id_bareme INT NOT NULL,
+    montant_min DECIMAL(12,2) NOT NULL,
+    montant_max DECIMAL(12,2),
+    taux DECIMAL(5,2) NOT NULL
+);
+
+CREATE TABLE REMUNERATION (
+    id_remuneration SERIAL PRIMARY KEY,
+    id_acte INT NOT NULL,
+    montant DECIMAL(12,2) NOT NULL,
+    taux_applique DECIMAL(5,2),
+    date_calcul TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE FACTURE (
+    id_facture SERIAL PRIMARY KEY,
+    id_remuneration INT NOT NULL,
+    numero VARCHAR(50) UNIQUE NOT NULL,
+    date_emission DATE NOT NULL,
+    statut enum_statut_facture NOT NULL DEFAULT 'emise'
+);
+
+CREATE TABLE PAIEMENT (
+    id_paiement SERIAL PRIMARY KEY,
+    id_facture INT NOT NULL,
+    date_paiement DATE NOT NULL,
+    montant DECIMAL(12,2) NOT NULL,
+    moyen enum_moyen_paiement,
+    statut enum_statut_paiement NOT NULL DEFAULT 'programme'
+);
+
+CREATE TABLE INDICATEUR_PERFORMANCE (
+    id_indicateur SERIAL PRIMARY KEY,
+    id_chasseur INT NOT NULL,
+    date_calcul DATE NOT NULL,
+    nb_mandats_signes INT NOT NULL DEFAULT 0,
+    nb_ventes_reussies INT NOT NULL DEFAULT 0,
+    delai_moyen_semaines DECIMAL(5,2),
+    part_exclusifs DECIMAL(5,2),
+    nb_visites_moyen DECIMAL(5,2)
+);
+
+-- ==========================================
+-- VUES D'EXPLOITATION (Résolution A01)
+-- ==========================================
+CREATE VIEW v_mandat_etat AS
+SELECT *, (date_fin < CURRENT_DATE AND statut IN ('actif','suspendu')) AS est_expire 
+FROM MANDAT;
+
+-- ==========================================
+-- DOCUMENTATION (Règles métiers structurelles)
+-- ==========================================
+COMMENT ON COLUMN DEMANDE_VERSION.criteres_bruts IS 'Conserve le texte libre saisi par le client avant parsing (Traçabilité). Renseignée uniquement à la reprise, NULL pour toute version créée par l''application.';
+COMMENT ON COLUMN MANDAT.date_fin IS 'Unique source de vérité pour le statut du mandat. Doit être mise à jour par trigger lors d''un renouvellement.';
+COMMENT ON COLUMN RENOUVELLEMENT_MANDAT.nouvelle_date_fin IS 'Historique uniquement. Ne pas utiliser pour vérifier si le mandat est actif.';
+
+COMMIT;
