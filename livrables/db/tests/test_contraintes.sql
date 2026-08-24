@@ -15,10 +15,8 @@ VALUES (1,1,2,3,'REG-2025-0002','2025-04-01','en_ligne','2025-04-01',4.50,'en so
 INSERT INTO proposition (id_demande, id_version, id_bien, score_matching) VALUES (1,1,1,90.00);
 
 \echo '--- T4 signataire non acquereur de la demande (C5, desormais declaratif)'
-INSERT INTO mandat (id_demande, id_version_contractuelle, id_chasseur, id_signataire, numero_registre,
-                    date_signature, mode_signature, date_debut, taux_honoraires, qualite_signataire)
-VALUES (1,1,2,1,'REG-2025-0003','2025-04-02','en_ligne','2025-04-02',4.50,'en son nom propre');
--- statut non actif pour isoler la contrainte testee de ux_mandat_actif
+-- statut non actif : isole fk_mandat_signataire de ux_mandat_actif, qui
+-- rejetterait d'abord un second mandat actif (revue PR #10, point C4).
 INSERT INTO mandat (id_demande, id_version_contractuelle, id_chasseur, id_signataire, numero_registre,
                     date_signature, mode_signature, date_debut, taux_honoraires, qualite_signataire, statut)
 VALUES (1,1,2,1,'REG-2025-0003b','2025-04-02','en_ligne','2025-04-02',4.50,'en son nom propre','renouvele');
@@ -105,3 +103,23 @@ FROM utilisateur u
 LEFT JOIN client c ON c.id_utilisateur = u.id_utilisateur
 LEFT JOIN chasseur ch ON ch.id_utilisateur = u.id_utilisateur
 WHERE u.id_utilisateur = 2;
+
+\echo '--- P6 cloture sans reaffectation : la denormalisation se vide (N3)'
+UPDATE affectation SET date_fin = now() WHERE id_demande = 1 AND date_fin IS NULL;
+SELECT id_chasseur, id_gestionnaire FROM demande WHERE id_demande = 1;
+
+\echo '--- T16 suppression de l acquereur principal (N2)'
+DELETE FROM demande_acquereur WHERE id_demande = 1 AND qualite = 'principal';
+
+\echo '--- T17 suppression du principal sur une demande sans mandat (N2, cas isole)'
+BEGIN;
+INSERT INTO demande (canal, date_consentement) VALUES ('telephone', now());
+INSERT INTO demande_acquereur (id_demande, id_client, qualite)
+VALUES (currval(pg_get_serial_sequence('demande','id_demande')), 4, 'principal');
+COMMIT;
+DELETE FROM demande_acquereur
+ WHERE id_demande = currval(pg_get_serial_sequence('demande','id_demande'));
+
+\echo '--- T18 requalification du principal en co-acquereur (N2)'
+UPDATE demande_acquereur SET qualite = 'co_acquereur'
+ WHERE id_demande = currval(pg_get_serial_sequence('demande','id_demande'));

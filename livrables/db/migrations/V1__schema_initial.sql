@@ -6,12 +6,22 @@
 --       les beneficiaires effectifs et la table de representation sont retires.
 -- =============================================================================
 
--- DROP SCHEMA IF EXISTS chasse CASCADE;
+BEGIN;
+
+-- Rejouabilité : le script recrée le schéma à neuf. Destructif par
+-- construction — réservé aux environnements de développement et d'intégration.
+DROP SCHEMA IF EXISTS chasse CASCADE;
+
+-- Les extensions sont installées dans public, APRÈS le DROP et AVANT tout
+-- SET search_path. L'ordre importe : sans clause WITH SCHEMA elles
+-- atterriraient dans chasse et le DROP les emporterait à chaque rejeu ;
+-- et placées avant le DROP, un IF NOT EXISTS ne les déplacerait pas depuis
+-- chasse — le schéma serait ensuite détruit avec elles.
+CREATE EXTENSION IF NOT EXISTS citext  WITH SCHEMA public;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+
 CREATE SCHEMA chasse;
 SET search_path = chasse, public;
-
-CREATE EXTENSION IF NOT EXISTS citext;
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ----------------------------------------------------------------- DOMAINES
 CREATE DOMAIN d_email     AS citext        CHECK (VALUE ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$');
@@ -394,6 +404,14 @@ CREATE INDEX ix_commentaire_demande  ON commentaire(id_demande) WHERE id_demande
 CREATE INDEX ix_commentaire_prop     ON commentaire(id_proposition) WHERE id_proposition IS NOT NULL;
 CREATE INDEX ix_commentaire_auteur   ON commentaire(id_auteur);
 CREATE INDEX ix_observation_periode  ON observation(id_periode, code_indicateur);
+-- Couverture des cinq dernières clés étrangères (revue PR #10, point C3).
+-- Sans elles, toute suppression dans la table référencée provoque un
+-- parcours complet de la table fille.
+CREATE INDEX ix_zone_parent           ON zone(id_zone_parent) WHERE id_zone_parent IS NOT NULL;
+CREATE INDEX ix_mandat_demande        ON mandat(id_demande);
+CREATE INDEX ix_observation_indicateur ON observation(code_indicateur);
+CREATE INDEX ix_objectif_indicateur   ON objectif(code_indicateur);
+CREATE INDEX ix_objectif_periode      ON objectif(id_periode);
 
 -- ================================================ 8. FONCTIONS ET TRIGGERS
 
@@ -410,6 +428,27 @@ CREATE CONSTRAINT TRIGGER tg_demande_acquereur
     AFTER INSERT OR UPDATE ON demande
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION trg_demande_acquereur();
+
+-- C4 (pendant) : la suppression ou la requalification de l'acquéreur principal
+-- laissait la demande sans principal, sans aucun rejet (revue PR #10, point N2).
+-- Le garde-fou doit exister des deux côtés de l'association.
+CREATE FUNCTION trg_acquereur_principal() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE cible bigint := COALESCE(NEW.id_demande, OLD.id_demande);
+BEGIN
+    -- Si la demande elle-même a disparu (cascade), il n'y a rien à garantir.
+    IF NOT EXISTS (SELECT 1 FROM demande WHERE id_demande = cible) THEN
+        RETURN NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM demande_acquereur
+                   WHERE id_demande = cible AND qualite = 'principal') THEN
+        RAISE EXCEPTION 'DEMANDE % sans acquereur principal', cible;
+    END IF;
+    RETURN NULL;
+END $$;
+CREATE CONSTRAINT TRIGGER tg_acquereur_principal
+    AFTER UPDATE OR DELETE ON demande_acquereur
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION trg_acquereur_principal();
 
 -- C9 : on ne fige pas un indicateur sur une periode non close.
 CREATE FUNCTION trg_observation_periode() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -442,21 +481,31 @@ CREATE TRIGGER tg_version_courante
     EXECUTE FUNCTION trg_version_courante();
 
 -- Synchronisation de la denormalisation demande.id_gestionnaire / id_chasseur.
+-- La denormalisation reflete l'affectation OUVERTE. Elle est donc recalculee
+-- a chaque ecriture, y compris a la cloture : sans cela, demande.id_chasseur
+-- conservait l'ancien chasseur apres une cloture sans reaffectation
+-- (revue PR #10, point N3).
 CREATE FUNCTION trg_affectation_sync() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE cible bigint := COALESCE(NEW.id_demande, OLD.id_demande);
+        ouverte affectation%ROWTYPE;
 BEGIN
-    IF NEW.date_fin IS NULL THEN
-        UPDATE demande
-           SET id_gestionnaire  = NEW.id_gestionnaire,
-               id_chasseur      = NEW.id_chasseur,
-               date_affectation = COALESCE(date_affectation, NEW.date_debut),
-               statut           = CASE WHEN statut = 'en_attente_affectation'
-                                       THEN 'affectee' ELSE statut END
-         WHERE id_demande = NEW.id_demande;
+    IF NOT EXISTS (SELECT 1 FROM demande WHERE id_demande = cible) THEN
+        RETURN NULL;
     END IF;
+    SELECT * INTO ouverte FROM affectation
+     WHERE id_demande = cible AND date_fin IS NULL;
+    UPDATE demande
+       SET id_gestionnaire  = ouverte.id_gestionnaire,
+           id_chasseur      = ouverte.id_chasseur,
+           date_affectation = COALESCE(date_affectation, ouverte.date_debut),
+           statut           = CASE WHEN statut = 'en_attente_affectation'
+                                        AND ouverte.id_demande IS NOT NULL
+                                   THEN 'affectee' ELSE statut END
+     WHERE id_demande = cible;
     RETURN NULL;
 END $$;
 CREATE TRIGGER tg_affectation_sync
-    AFTER INSERT OR UPDATE ON affectation
+    AFTER INSERT OR UPDATE OR DELETE ON affectation
     FOR EACH ROW EXECUTE FUNCTION trg_affectation_sync();
 
 -- ============================================================== 9. VUES
@@ -492,3 +541,5 @@ SELECT d.id_demande, d.id_gestionnaire, d.canal,
        extract(epoch FROM (d.date_affectation - d.date_depot)) / 3600.0 AS delai_heures
 FROM demande d
 WHERE d.date_affectation IS NOT NULL;
+
+COMMIT;

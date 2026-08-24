@@ -1,12 +1,12 @@
 -- =============================================================================
---  Plateforme de chasse immobiliere — MPD PostgreSQL 16 — v5
---  Schema : chasse
---  v5 : la clientele est exclusivement composee de particuliers.
---       CLIENT redevient un sous-type de UTILISATEUR ; les entreprises,
---       les beneficiaires effectifs et la table de representation sont retires.
+--  Jeu de donnees de validation — schema chasse
+--  NON REJOUABLE : les identifiants 1 a 4 sont codes en dur alors que les
+--  cles primaires sont GENERATED ALWAYS AS IDENTITY. A n'executer que sur un
+--  schema fraichement cree par V1__schema_initial.sql (revue PR #10, N1).
 -- =============================================================================
 
--- ================================================== 10. JEU DE VALIDATION
+SET search_path = chasse, public;
+
 INSERT INTO utilisateur (nom, prenom, email, telephone, password_hash) VALUES
  ('Durand','Claire','claire.durand@example.com','+33 6 12 34 56 78','$2b$12$x'),
  ('Martin','Paul','paul.martin@example.com','+33 6 22 33 44 55','$2b$12$y'),
