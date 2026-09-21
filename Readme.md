@@ -27,6 +27,12 @@ Projet Fil rouge/
 │   ├── MySQL.sql          ← à jouer sur MariaDB/MySQL
 │   ├── PgSQL.sql          ← à jouer sur PostgreSQL
 │   └── Readme.md          ← comment importer, ce qui vous attend
+├── outils/                ← 🛠️ outil de génération d'annonces (jeu de données factice)
+│   ├── generer_annonces.py
+│   └── Readme.md          ← utilisation, options, sorties générées
+├── user-stories/          ← 🥒 user stories en Gherkin déduites de ce Readme
+│   ├── *.feature
+│   └── Readme.md          ← index des fichiers .feature
 └── documents utiles/      ← 📚 fiches de cours & modèles à remplir
     └── Readme.md          ← l'index de tous les documents
 ```
@@ -34,6 +40,16 @@ Projet Fil rouge/
 ### 📚 Les documents utiles
 
 Le dossier **[`documents utiles/`](./documents%20utiles/)** contient tout ce qu'il faut pour produire vos livrables : des **fiches de cours** (MCD/Merise, OLTP & OLAP, RACI, RGPD…) qui expliquent chaque notion, et des **modèles à remplir** (note de cadrage, matrice de décision, plan de tests, journal de décisions…). Commencez par son **[index](./documents%20utiles/Readme.md)**, qui range chaque document par usage, par phase et par bloc de compétences.
+
+### 🛠️ L'outil de génération d'annonces
+
+Le dossier **[`outils/`](./outils/)** contient un script Python (`generer_annonces.py`, sans dépendance externe) qui génère des **critères de recherche** et des **annonces immobilières** factices, avec un flux volontairement hétérogène (champs absents/renommés, formats de date variés…) simulant plusieurs sources. Utile pour disposer d'un jeu de données de test au-delà des fixtures de référence — voir son **[Readme](./outils/Readme.md)** pour l'utilisation et les options.
+
+### 🥒 Les user stories en Gherkin
+
+Le dossier **[`user-stories/`](./user-stories/)** contient des **user stories au format Gherkin**, déduites des parcours utilisateurs décrits dans ce Readme (particulier et chasseur, actuels et futurs avec IA), ainsi que des règles métier transverses (mandat, rémunération). C'est une synthèse de travail — pas un livrable officiel — utile pour clarifier les règles métier avant modélisation et alimenter vos futurs tests fonctionnels. Voir son **[index](./user-stories/Readme.md)** pour le détail fichier par fichier.
+
+Pour une lecture confortable des fichiers `.feature` dans VS Code (coloration syntaxique, autocomplétion des steps), installez l'extension **[Cucumber (Gherkin) Full Support — VSCucumberAutoComplete](https://github.com/alexkrechik/VSCucumberAutoComplete)**. La syntaxe Gherkin elle-même est documentée dans la **[référence officielle Cucumber](https://cucumber.io/docs/gherkin/reference/)**.
 
 ### Par où commencer
 
