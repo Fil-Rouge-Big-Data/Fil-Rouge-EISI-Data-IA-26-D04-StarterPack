@@ -1,0 +1,64 @@
+# ============================================================
+# Environnement local — Chasse immobilière (OLTP v8.41)
+# Deux bases :
+#   - postgres-oltp    : CIBLE OLTP v8.41 (port hôte 5433)
+#   - postgres-source  : SOURCE héritée Fil_Rouge_Depart (port hôte 5434)
+# La migration lit la source et écrit dans la cible.
+# On n'installe PAS Airflow/OLAP/backend ici (règle 6 : pas de
+# sur-architecture). Ils viendront quand leur phase commencera.
+#
+# SÉCURITÉ (poste de développement uniquement) :
+#   - les ports ne sont publiés que sur 127.0.0.1 (jamais sur le réseau local) ;
+#   - POSTGRES_PASSWORD est OBLIGATOIRE (aucun mot de passe par défaut) : copier
+#     .env.example en .env et y définir un secret (ex. `openssl rand -base64 24`) ;
+#   - ne JAMAIS exposer ces ports sur 0.0.0.0 ni réutiliser ce compose en production.
+# ============================================================
+services:
+  postgres-oltp:
+    image: postgres:16.15
+    container_name: chasse_oltp
+    environment:
+      POSTGRES_USER: chasse_migration
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant - copier .env.example en .env et y definir un secret}"
+      POSTGRES_DB: chasse_v8
+      LANG: C.UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata_oltp:/var/lib/postgresql/data
+      # schéma cible v8.41 chargé au premier démarrage (ordre alphabétique)
+      - ./livrables/db/01_ddl.sql:/docker-entrypoint-initdb.d/01_ddl.sql:ro
+      - ./livrables/db/02_triggers_vues.sql:/docker-entrypoint-initdb.d/02_triggers_vues.sql:ro
+      # structures de migration (staging + extension de vue)
+      - ./livrables/migration/sql/00_staging.sql:/docker-entrypoint-initdb.d/50_staging.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chasse_migration -d chasse_v8"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  postgres-source:
+    image: postgres:16.15
+    container_name: chasse_source
+    environment:
+      POSTGRES_USER: chasse_migration
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant - copier .env.example en .env et y definir un secret}"
+      POSTGRES_DB: chasse_source
+      LANG: C.UTF-8
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - pgdata_source:/var/lib/postgresql/data
+      # la source héritée est chargée telle quelle au premier démarrage
+      - ./fixtures/PgSQL.sql:/docker-entrypoint-initdb.d/01_source.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chasse_migration -d chasse_source"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata_oltp:
+  pgdata_source:

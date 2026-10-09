@@ -1,0 +1,13 @@
+# Paramétrage des sources de migration (ADR-001 : migration récurrente).
+# Chaque source déclare comment l'atteindre et son label de traçage.
+sources:
+  historique:
+    label: "Système hérité (fixtures/PgSQL.sql)"
+    schema_source: "Fil_Rouge_Depart"
+    env_prefix: "SRC"        # variables SRC_PGHOST, SRC_PGDATABASE, ...
+    correction_a06: {3: 19}  # mandat client_id=3 (chasseur) -> client 19 (voir A06)
+  # Exemple pour un futur rachat :
+  # rachat_agence_x:
+  #   label: "Agence X (rachat 2026)"
+  #   schema_source: "public"
+  #   env_prefix: "RACHAT_X"

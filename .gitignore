@@ -51,3 +51,11 @@ coverage/
 
 # Données générées par outils/generer_annonces.py (pas des fixtures de référence)
 fixtures/annonces/
+
+# --- Ajouts livrable v8.3 ---
+# Données de travail et exports locaux
+/tmp/
+outputs/
+*.zip
+# Cluster PostgreSQL local de test
+pgdata/
