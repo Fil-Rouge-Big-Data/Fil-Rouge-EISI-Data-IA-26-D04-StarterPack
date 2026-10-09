@@ -37,12 +37,17 @@ GESTIONNAIRE_MATRICULE_EXCLU = "SYS-MIGRATION"
 # présence d'au moins un acte rattaché à l'une de ses demandes.
 SQL_CANDIDATS = """
 WITH acte_client AS (  -- clients ayant au moins un acte signé (chaîne acte->...->demande)
-    SELECT DISTINCT da.id_client
+    SELECT da.id_client
     FROM acte a
     JOIN compromis co        ON co.id_compromis = a.id_compromis
     JOIN offre_acquisition o ON o.id_offre = co.id_offre
     JOIN proposition p       ON p.id_proposition = o.id_proposition
     JOIN demande_acquereur da ON da.id_demande = p.id_demande
+    UNION  -- ADR-053 : acte hors dispositif, rattaché directement au mandat
+    SELECT da.id_client
+    FROM acte a
+    JOIN mandat m            ON m.id_mandat = a.id_mandat
+    JOIN demande_acquereur da ON da.id_demande = m.id_demande
 ),
 activite AS (  -- S18 : dernière activité RÉELLE = max des dates de demande ET de mandat.
     SELECT id_client, max(dt) AS derniere_activite FROM (

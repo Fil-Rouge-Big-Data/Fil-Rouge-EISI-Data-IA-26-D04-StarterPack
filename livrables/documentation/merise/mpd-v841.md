@@ -46,6 +46,11 @@
 | Un mandat courant par demande | colonne scalaire `demande.id_mandat_courant` (unicité mécanique, ADR-048) |
 | Succession 6 mois entre mandats | **trigger** `tg_mandat_succession` (inter-lignes) |
 | Chaîne de vente (offre acceptée → compromis → acte) | **triggers** (inter-lignes, ADR-045) |
+| Acte : exactement une origine (compromis, ou mandat pour un achat hors dispositif) | **CHECK** `(id_compromis IS NULL) <> (id_mandat IS NULL)` (`ck_acte_origine`, ADR-053) |
+| Achat hors dispositif : mandat exclusif en vigueur à la date de l'acte | **trigger** `tg_acte_hors_dispositif` (ADR-053) |
+| Rémunération sur le mandat de l'acte | **trigger** `tg_remuneration_mandat_acte` (ADR-053) |
+| `vente_externe` réservé au mandat non exclusif | **CHECK** `ck_mandat_vente_externe` (ADR-053) |
+| Acte hors dispositif : source et date de connaissance tracées | **CHECK** `ck_acte_trace_hors_dispositif` (ADR-053) |
 | Fin anticipée du mandat = date + type | **CHECK symétrique** `(date_resiliation IS NULL) = (type_resiliation IS NULL)` (`ck_mandat_resil`) ; type contrôlé dont `vente_externe` (ADR-049) |
 | Caducité (compromis) et sans-suite (demande) = date + motif | **CHECK symétrique** `(date IS NULL) = (motif IS NULL)` |
 | Rémunération gelée complète | colonnes de calcul **NOT NULL**, 5 composantes du score bornées 0–100, `taux_final` borné **[20 ; 60]** par CHECK (ADR-049) |
@@ -72,6 +77,8 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 - `tg_mandat_succession` — renouvellement ≥ 6 mois après le précédent (ADR-048).
 - `tg_compromis_offre_acceptee` — compromis seulement sur une offre acceptée.
 - `tg_acte_compromis_realise` — pas d'acte sur un compromis caduc.
+- `tg_acte_hors_dispositif` — un acte sans compromis exige un mandat exclusif en vigueur à sa date (ADR-053).
+- `tg_remuneration_mandat_acte` — la rémunération porte sur le mandat de l'acte, quelle que soit son origine (ADR-053).
 - `tg_commentaire_prive` — un client ne peut pas poster de commentaire privé (RG-01).
 - `tg_observation_periode` — observation dans une période close.
 
@@ -129,14 +136,15 @@ non recalculable qui fait foi dans `v_mandat`. Le cache d'état calculé n'exist
 
 ---
 
-## 9. Validation par exécution (v8.41)
+## 9. Validation par exécution (v8.42)
 
 Vérifié sur PostgreSQL 16.15 (code visant PostgreSQL 18 : le `uuidv7()` natif n'a pas été essayé, le repli
 l'a été) :
-- DDL rejouable : **38 tables, 8 vues, 337 colonnes**.
-- Harnais de contraintes : **23 rejets, chacun par la contrainte attendue**, + 4 écritures valides.
+- DDL rejouable : **38 tables, 8 vues, 340 colonnes**.
+- Harnais de contraintes : **30 rejets, chacun par la contrainte attendue**, + 5 écritures valides
+  (v8.42 : T24 à T30 et P8, achat hors dispositif — ADR-053).
 - Batterie de **sondes** : 12 fermées, 0 ouverte (hermétiques : mêmes résultats quel que soit l'état de la base).
 - Migration : 153 lignes, 73 anomalies tracées ; 48 tests ; dérivation des états prouvée (le même mandat
   change d'état selon la date de référence).
-- Anonymisation RGPD : 7 tests.
+- Anonymisation RGPD : 8 tests (v8.42 : client à achat hors dispositif conservé, ADR-053).
 - Documentation : `python livrables/db/verifier_dictionnaire.py` contrôle le dictionnaire contre le DDL.

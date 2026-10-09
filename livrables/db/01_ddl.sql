@@ -313,8 +313,9 @@ CREATE TABLE mandat (
     reference_procuration  text,
     date_resiliation       date,
     -- ADR-049 : type de fin anticipée. 'vente_externe' = le client a acheté hors
-    -- dispositif. Mandat NON exclusif : pas d'acte, le mandat se clôt. Mandat
-    -- EXCLUSIF : droit ouvert, acte créé sans compromis (v8.42, ADR-049 §2.3).
+    -- dispositif sous mandat NON exclusif : pas d'acte, le mandat se clôt.
+    -- Sous mandat EXCLUSIF, l'achat hors dispositif n'est pas une résiliation : c'est
+    -- un acte sans compromis (ADR-049 §2.3, ADR-053), le mandat est clos en succès.
     type_resiliation       text CHECK (type_resiliation IN ('abandon_client','abandon_chasseur','vente_externe','non_conformite','autre')),
     motif_resiliation      text,   -- détail libre (ex. reprise migration à requalifier)
     CONSTRAINT fk_mandat_version   FOREIGN KEY (id_demande, id_version_contractuelle)
@@ -335,7 +336,9 @@ CREATE TABLE mandat (
     CONSTRAINT ck_mandat_procur    CHECK (qualite_signataire <> 'procuration' OR reference_procuration IS NOT NULL),  -- T8
     -- ADR-048 : la résiliation (abandon anticipé) est le SEUL événement non dérivable.
     -- Si date_resiliation est posée, un motif est requis (et inversement).
-    CONSTRAINT ck_mandat_resil     CHECK ((date_resiliation IS NULL) = (type_resiliation IS NULL))
+    CONSTRAINT ck_mandat_resil     CHECK ((date_resiliation IS NULL) = (type_resiliation IS NULL)),
+    -- ADR-053 : 'vente_externe' réservé au mandat non exclusif (exclusif -> acte hors dispositif).
+    CONSTRAINT ck_mandat_vente_externe CHECK (NOT (exclusif AND type_resiliation = 'vente_externe'))  -- T29
 );
 
 -- ADR-048 : FK differee demande.id_mandat_courant -> mandat (dependance circulaire
@@ -513,7 +516,7 @@ CREATE TABLE offre_acquisition (
     -- ADR-049 : origine_decouverte SUPPRIMÉ. Le droit à rémunération se dérive de
     -- l'existence de l'acte. Chaîne standard : proposition->offre->compromis->acte.
     -- Mandat exclusif + vente hors dispositif : acte SANS compromis, rattaché
-    -- directement au mandat (v8.42, ADR-049 §2.3). Mandat non exclusif + vente
+    -- directement au mandat (v8.42, ADR-049 §2.3, ADR-053). Mandat non exclusif + vente
     -- hors dispositif : pas d'acte, résiliation 'vente_externe'.
     montant           d_montant NOT NULL CHECK (montant > 0),
     date_signature    date NOT NULL,
@@ -565,7 +568,16 @@ CREATE TABLE clause_suspensive (
 
 CREATE TABLE acte (
     id_acte         uuid PRIMARY KEY DEFAULT uuidv7(),
-    id_compromis    uuid NOT NULL UNIQUE REFERENCES compromis(id_compromis),   -- A33 : au plus un
+    -- ADR-053 : un acte a exactement UNE origine (ck_acte_origine) :
+    --   - vente menée par le chasseur : id_compromis (chaîne proposition->offre->compromis) ;
+    --   - achat hors dispositif sous mandat exclusif : id_mandat, sans compromis
+    --     (garde « exclusif + en vigueur à la date de l'acte » : tg_acte_hors_dispositif).
+    id_compromis    uuid UNIQUE REFERENCES compromis(id_compromis),            -- A33 : au plus un
+    id_mandat       uuid UNIQUE REFERENCES mandat(id_mandat),                  -- ADR-053 : au plus un acte hors dispositif par mandat
+    -- ADR-053 : l'agence apprend souvent un achat hors dispositif après coup (le notaire du
+    -- client n'est pas tenu de connaître le mandat). On trace qui l'a signalé et quand.
+    source_information text CHECK (source_information IN ('client','notaire','autre')),
+    date_connaissance  date,                                                   -- distincte de date_signature
     date_signature  date NOT NULL,
     montant_vente   d_montant NOT NULL CHECK (montant_vente > 0),
     honoraires_fixe d_montant,
@@ -576,7 +588,12 @@ CREATE TABLE acte (
     honoraires_encaisses   boolean NOT NULL DEFAULT false,
     date_encaissement      date,
     CONSTRAINT ck_acte_honoraires CHECK (honoraires_fixe IS NOT NULL OR honoraires_taux IS NOT NULL),  -- C16
-    CONSTRAINT ck_acte_encaissement CHECK (honoraires_encaisses = false OR date_encaissement IS NOT NULL)
+    CONSTRAINT ck_acte_encaissement CHECK (honoraires_encaisses = false OR date_encaissement IS NOT NULL),
+    CONSTRAINT ck_acte_origine CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL)),  -- ADR-053 : T24/T25
+    -- ADR-053 : source et date de connaissance renseignées pour, et seulement pour, l'acte hors dispositif.
+    CONSTRAINT ck_acte_trace_hors_dispositif CHECK (
+        (id_mandat IS NULL) = (source_information IS NULL)
+        AND (id_mandat IS NULL) = (date_connaissance IS NULL))                        -- T30
 );
 
 -- ------------------------------------------------------------
@@ -642,8 +659,9 @@ CREATE TABLE remuneration_chasseur (
     -- ADR-049 : GEL COMPLET figé au jour de l'acte. Une rémunération existe pour
     -- CHAQUE acte. Mandat non exclusif : un acte n'existe que si le chasseur a mené
     -- la vente. Mandat exclusif : un acte existe aussi pour une vente hors dispositif
-    -- (v8.42 : acte sans compromis, ADR-049 §2.3). Dans les deux cas :
+    -- (v8.42 : acte sans compromis, ADR-049 §2.3, ADR-053). Dans les deux cas :
     -- rémunération = droit ouvert. Pas de droit_ouvert à stocker.
+    -- ADR-053 : id_mandat = mandat de l'acte (tg_remuneration_mandat_acte, T28).
     -- R1 : colonnes de gel NOT NULL (insert complet, pas de calcul par étapes).
     honoraires            d_montant NOT NULL,                    -- assiette = fixe + % * prix_acté
     -- R4 : les 5 COMPOSANTES du score conservées (gel complet, reconstituable juridiquement),

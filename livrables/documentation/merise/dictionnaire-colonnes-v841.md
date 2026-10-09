@@ -3,7 +3,7 @@
 > ⚙️ **Fichier GÉNÉRÉ depuis `livrables/db/01_ddl.sql` : ne pas le modifier à la main.**
 > Régénération : `python livrables/db/generer_dictionnaire_colonnes.py`. Contrôle : `python livrables/db/verifier_dictionnaire.py`.
 >
-> **38 tables, 337 colonnes**, une ligne par colonne : type, nullité, clés, défauts,
+> **38 tables, 340 colonnes**, une ligne par colonne : type, nullité, clés, défauts,
 > règles et commentaires tels qu'écrits dans le DDL. Le **sens métier** et les justifications sont
 > dans `dictionnaire-donnees-v841.md` ; ce fichier garantit l'**exhaustivité**.
 
@@ -282,6 +282,7 @@ Légende : **NN** = NOT NULL ; **PK** = clé primaire ; **UQ** = unique ; **FK**
 - `ck_mandat_remun` — `CHECK (taux_honoraires IS NOT NULL OR forfait_honoraires IS NOT NULL)`
 - `ck_mandat_procur` — `CHECK (qualite_signataire <> 'procuration' OR reference_procuration IS NOT NULL)`
 - `ck_mandat_resil` — `CHECK ((date_resiliation IS NULL) = (type_resiliation IS NULL))`
+- `ck_mandat_vente_externe` — `CHECK (NOT (exclusif AND type_resiliation = 'vente_externe'))`
 
 
 ## mandat_reprise
@@ -499,7 +500,10 @@ Légende : **NN** = NOT NULL ; **PK** = clé primaire ; **UQ** = unique ; **FK**
 | Colonne | Type | NN | Clé / lien | Défaut / règle | Commentaire (DDL) |
 |---|---|---|---|---|---|
 | `id_acte` | `uuid` | oui | PK | DEFAULT uuidv7() |  |
-| `id_compromis` | `uuid` | oui | UQ FK→compromis(id_compromis) |  | A33 : au plus un |
+| `id_compromis` | `uuid` |  | UQ FK→compromis(id_compromis) |  | A33 : au plus un |
+| `id_mandat` | `uuid` |  | UQ FK→mandat(id_mandat) |  | ADR-053 : au plus un acte hors dispositif par mandat |
+| `source_information` | `text` |  |  | CHECK (source_information IN ('client','notaire','autre')) |  |
+| `date_connaissance` | `date` |  |  |  | distincte de date_signature |
 | `date_signature` | `date` | oui |  |  |  |
 | `montant_vente` | `d_montant` | oui |  | CHECK (montant_vente > 0) |  |
 | `honoraires_fixe` | `d_montant` |  |  |  |  |
@@ -510,6 +514,8 @@ Légende : **NN** = NOT NULL ; **PK** = clé primaire ; **UQ** = unique ; **FK**
 **Contraintes de table :**
 - `ck_acte_honoraires` — `CHECK (honoraires_fixe IS NOT NULL OR honoraires_taux IS NOT NULL)`
 - `ck_acte_encaissement` — `CHECK (honoraires_encaisses = false OR date_encaissement IS NOT NULL)`
+- `ck_acte_origine` — `CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL))`
+- `ck_acte_trace_hors_dispositif` — `CHECK ( (id_mandat IS NULL) = (source_information IS NULL) AND (id_mandat IS NULL) = (date_connaissance IS NULL))`
 
 
 ## bareme

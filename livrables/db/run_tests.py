@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Batterie de tests MPD v8.41 (harnais probant : chaque rejet doit venir de la contrainte ATTENDUE). Chaque test REJET attend une exception ; chaque test VALIDE attend un succès.
+"""Batterie de tests MPD v8.42 (harnais probant : chaque rejet doit venir de la contrainte ATTENDUE). Chaque test REJET attend une exception ; chaque test VALIDE attend un succès.
 
 Portable : la connexion se configure par les variables d'environnement PostgreSQL
 standard (PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD). Valeurs par défaut
@@ -72,7 +72,21 @@ ATTENDU = {
     "T16": "ux_offre_acceptee",     "T17": "ck_compromis_caducite",   "T18": "ck_acte_honoraires",
     "T19": "ck_visite_annulation",  "T20": "trigger",                 "T21": "fk_proposition_mandat",
     "T22": "ck_chasseur_habilitation", "T23": "trigger",
+    # ADR-053 (v8.42) : acte hors dispositif sous mandat exclusif
+    "T24": "ck_acte_origine",       "T25": "ck_acte_origine",         "T26": "trigger",
+    "T27": "trigger",               "T28": "trigger",                 "T29": "ck_mandat_vente_externe",
+    "T30": "ck_acte_trace_hors_dispositif",
 }
+
+# ADR-053 : renouvellement du mandat du seed (filiation, début = fin du précédent), exclusif ou non.
+def _renouvellement(id_mandat, exclusif):
+    return ("INSERT INTO mandat (id_mandat,id_demande,id_version_contractuelle,id_chasseur,id_signataire,id_mandat_precedent,"
+            "numero_registre,date_signature,mode_signature,date_debut,numero_habilitation_signature,validite_habilitation_signature,"
+            "exclusif,taux_honoraires,base_honoraires,taux_tva,qualite_signataire) VALUES "
+            f"('{id_mandat}','33333333-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000001',"
+            "'11111111-0000-0000-0000-000000000001','11111111-0000-0000-0000-000000000003','88888888-0000-0000-0000-000000000001',"
+            f"'REG-{id_mandat[-2:]}','2025-12-05','presentiel','2025-12-05','ATT-3401','2027-01-01',{str(exclusif).lower()},"
+            "3.0,'TTC',20.0,'nom_propre'); ")
 
 def verdict_rejet(identifiant, msg):
     """(ok, détail). OK seulement si la contrainte (ou le trigger) ATTENDU est celui qui a rejeté."""
@@ -139,6 +153,24 @@ REJETS = [
   "INSERT INTO utilisateur (id_utilisateur,nom,prenom,email,password_hash) VALUES ('11111111-0000-0000-0000-0000000000f2','X','Y','xyf2@m.fr','x'); INSERT INTO chasseur (id_utilisateur,type_habilitation,numero_habilitation,date_validite_habilitation,organisme_delivrance,organisme_garant,montant_garantie_financiere,numero_rcp,date_echeance_rcp,statut_juridique,date_entree_reseau,capacite_max_mandats) VALUES ('11111111-0000-0000-0000-0000000000f2','carte_t','CT','2027-01-01','CCI','G',120000,'R','2027-01-01','salarie','2024-01-01',15);"),
  ("T23 v82 mandat son propre précédent",
   "UPDATE mandat SET id_mandat_precedent = id_mandat WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
+ # --- v8.42 / ADR-053 : achat hors dispositif sous mandat exclusif ---
+ ("T24 ADR-053 acte avec compromis ET mandat (deux origines)",
+  "UPDATE acte SET id_mandat='88888888-0000-0000-0000-000000000001', source_information='notaire', date_connaissance='2025-08-05' "
+  "WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
+ ("T25 ADR-053 acte sans compromis ni mandat (aucune origine)",
+  "INSERT INTO acte (date_signature,montant_vente,honoraires_fixe) VALUES ('2025-08-01',300000,9000);"),
+ ("T26 ADR-053 acte hors dispositif sur mandat NON exclusif",
+  _renouvellement("88888888-0000-0000-0000-0000000000f6", False)
+  + "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES ('88888888-0000-0000-0000-0000000000f6','2026-01-10',300000,9000,'client','2026-01-12');"),
+ ("T27 ADR-053 acte hors dispositif après l'échéance du mandat exclusif",
+  "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES ('88888888-0000-0000-0000-000000000001','2026-01-10',300000,9000,'notaire','2026-02-01');"),
+ ("T28 ADR-053 rémunération sur un autre mandat que celui de l'acte",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "UPDATE remuneration_chasseur SET id_mandat='88888888-0000-0000-0000-0000000000f8' WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
+ ("T29 ADR-053 résiliation 'vente_externe' d'un mandat exclusif",
+  "UPDATE mandat SET date_resiliation='2025-09-01', type_resiliation='vente_externe' WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
+ ("T30 ADR-053 acte hors dispositif sans source ni date de connaissance",
+  "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe) VALUES ('88888888-0000-0000-0000-000000000001','2025-09-15',300000,9000);"),
  ("T20 C18 client poste commentaire privé",
   "INSERT INTO commentaire (id_auteur,id_demande,type_contexte,est_prive,contenu) VALUES ('11111111-0000-0000-0000-000000000003','33333333-0000-0000-0000-000000000001','note_recherche',true,'note privee interdite');"),
 ]
@@ -152,6 +184,18 @@ VALIDES = [
   "INSERT INTO commentaire (id_auteur,id_demande,type_contexte,est_prive,contenu) VALUES ('11111111-0000-0000-0000-000000000005','33333333-0000-0000-0000-000000000001','note_recherche',true,'note interne cumul');"),
  ("P7  renouvellement = nouveau mandat avec filiation",
   "INSERT INTO mandat (id_demande,id_version_contractuelle,id_chasseur,id_signataire,id_mandat_precedent,numero_registre,date_signature,mode_signature,date_debut,numero_habilitation_signature,validite_habilitation_signature,exclusif,taux_honoraires,base_honoraires,taux_tva,qualite_signataire) VALUES ('33333333-0000-0000-0000-000000000001','44444444-0000-0000-0000-000000000001','11111111-0000-0000-0000-000000000001','11111111-0000-0000-0000-000000000003','88888888-0000-0000-0000-000000000001','REG-2025-002','2025-12-05','presentiel','2025-12-05','CPI3401 2025 000 001','2027-06-05',true,3.0,'TTC',20.0,'nom_propre');"),
+ # ADR-053 : le client achète en direct sous mandat exclusif en vigueur -> acte sans compromis,
+ # rémunération du chasseur du mandat, et le mandat est dérivé « clos_succes » dans v_mandat.
+ ("P8  achat hors dispositif sous mandat exclusif : acte, rémunération, mandat clos en succès",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('ac700000-0000-0000-0000-000000000008','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
+    "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
+    "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000008','11111111-0000-0000-0000-000000000001',"
+    "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001'); "
+    "DO $$ BEGIN IF (SELECT statut_calcule FROM v_mandat WHERE id_mandat='88888888-0000-0000-0000-0000000000f8') <> 'clos_succes' "
+    "THEN RAISE EXCEPTION 'P8 : le mandat devrait être clos en succès'; END IF; END $$;"),
 ]
 
 def savepoint_wrap(sql):
@@ -159,7 +203,7 @@ def savepoint_wrap(sql):
     return "BEGIN;\n"+sql+"\nROLLBACK;"
 
 print("="*70)
-print("BATTERIE DE TESTS MPD v8.41 — PostgreSQL 16+/18")
+print("BATTERIE DE TESTS MPD v8.42 — PostgreSQL 16+/18")
 print("="*70)
 nrej_ok=0
 print("\n--- TESTS DE REJET (une écriture invalide DOIT échouer PAR UNE CONTRAINTE) ---")

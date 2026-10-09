@@ -109,7 +109,7 @@ Sorties attendues :
 | Script | Attendu |
 |---|---|
 | `run_migration_docker.sh` | `[OK] source=historique lignes=153 anomalies=73`, `Validation OK`, `48 passed` |
-| `run_tests_docker.sh` | `REJETS : 23/23 correctement rejetés`, `VALIDES : 4/4 correctement acceptés` |
+| `run_tests_docker.sh` | `REJETS : 30/30 correctement rejetés`, `VALIDES : 5/5 correctement acceptés` |
 
 > ⚠️ **Les deux scripts remettent le schéma de `chasse_v8` à zéro** (`DROP SCHEMA public CASCADE`
 > puis rechargement) avant de s'exécuter : ils peuvent donc être lancés **dans n'importe quel
@@ -122,7 +122,7 @@ Optionnel, depuis le venv (Git Bash) : tests d'anonymisation RGPD et batterie de
 export PGPASSWORD="<ton mot de passe>"
 export REQUIRE_DB=1 DST_PGHOST=127.0.0.1 DST_PGPORT=5433 DST_PGUSER=chasse_migration \
        DST_PGDATABASE=chasse_v8 DST_PGPASSWORD="$PGPASSWORD"
-python -m pytest livrables/jobs/anonymisation -q                       # attendu : 7 passed
+python -m pytest livrables/jobs/anonymisation -q                       # attendu : 8 passed
 PGHOST=127.0.0.1 PGPORT=5433 PGUSER=chasse_migration PGDATABASE=chasse_v8 \
   python livrables/db/run_sondes.py                                    # attendu : 12 fermées / 0 ouvertes
 ```

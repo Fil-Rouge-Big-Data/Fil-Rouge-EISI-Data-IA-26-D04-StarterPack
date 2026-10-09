@@ -155,6 +155,57 @@ CREATE TRIGGER tg_acte_compromis_realise
     BEFORE INSERT OR UPDATE OF id_compromis ON acte
     FOR EACH ROW EXECUTE FUNCTION f_acte_compromis_valide();
 
+-- ADR-053 : achat hors dispositif (acte sans compromis, rattaché au mandat).
+-- Le droit n'est ouvert que sous mandat EXCLUSIF en vigueur à la date de l'acte
+-- (Readme, US 00 et 10) : signé, non échu (date_debut + 6 mois) et non résilié avant.
+-- Sous mandat non exclusif, l'achat ailleurs clôt le mandat ('vente_externe', ADR-049).
+CREATE OR REPLACE FUNCTION f_acte_hors_dispositif() RETURNS trigger AS $$
+DECLARE
+    m mandat%ROWTYPE;
+BEGIN
+    IF NEW.id_mandat IS NULL THEN
+        RETURN NEW;                                   -- vente menée par le chasseur
+    END IF;
+    SELECT * INTO m FROM mandat WHERE id_mandat = NEW.id_mandat;
+    IF NOT m.exclusif THEN
+        RAISE EXCEPTION 'S24 : acte hors dispositif refusé, le mandat % n''est pas exclusif', NEW.id_mandat;
+    END IF;
+    IF NEW.date_signature < m.date_debut
+       OR NEW.date_signature > (m.date_debut + INTERVAL '6 months')::date
+       OR (m.date_resiliation IS NOT NULL AND NEW.date_signature > m.date_resiliation) THEN
+        RAISE EXCEPTION 'S24 : acte hors dispositif refusé, le mandat % n''est pas en vigueur le %', NEW.id_mandat, NEW.date_signature;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_acte_hors_dispositif
+    BEFORE INSERT OR UPDATE OF id_mandat, date_signature ON acte
+    FOR EACH ROW EXECUTE FUNCTION f_acte_hors_dispositif();
+
+-- ADR-053 : la rémunération porte sur LE mandat de l'acte, quelle que soit l'origine
+-- de l'acte (chaîne compromis->offre->proposition, ou mandat direct hors dispositif).
+-- La FK composée fk_remuneration_mandat garantit déjà chasseur = chasseur du mandat.
+CREATE OR REPLACE FUNCTION f_remuneration_mandat_acte() RETURNS trigger AS $$
+DECLARE
+    v_mandat uuid;
+BEGIN
+    SELECT COALESCE(a.id_mandat, p.id_mandat) INTO v_mandat
+    FROM acte a
+    LEFT JOIN compromis co        ON co.id_compromis = a.id_compromis
+    LEFT JOIN offre_acquisition o ON o.id_offre = co.id_offre
+    LEFT JOIN proposition p       ON p.id_proposition = o.id_proposition
+    WHERE a.id_acte = NEW.id_acte;
+    IF v_mandat IS DISTINCT FROM NEW.id_mandat THEN
+        RAISE EXCEPTION 'S25 : la rémunération doit porter sur le mandat de l''acte (acte %, mandat de l''acte %, mandat saisi %)',
+            NEW.id_acte, v_mandat, NEW.id_mandat;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_remuneration_mandat_acte
+    BEFORE INSERT OR UPDATE OF id_acte, id_mandat ON remuneration_chasseur
+    FOR EACH ROW EXECUTE FUNCTION f_remuneration_mandat_acte();
+
 -- Mandat : date_fin et expiration calculées (ADR-030), jamais stockées
 -- ADR-048 : état du mandat ENTIÈREMENT DÉRIVÉ des faits. Aucun statut stocké.
 CREATE VIEW v_mandat AS
@@ -162,10 +213,12 @@ SELECT m.*,
        (m.date_debut + INTERVAL '6 months')::date AS date_fin,
        ((m.date_debut + INTERVAL '6 months')::date < date_reference()) AS est_expire,
        -- faits dérivés
-       EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
+       -- ADR-053 : deux origines d'acte — hors dispositif (acte.id_mandat) ou chaîne de vente.
+       (EXISTS (SELECT 1 FROM acte a WHERE a.id_mandat = m.id_mandat)
+        OR EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
                JOIN offre_acquisition o ON o.id_offre=co.id_offre
                JOIN proposition p ON p.id_proposition=o.id_proposition
-               WHERE p.id_mandat = m.id_mandat) AS a_acte,
+               WHERE p.id_mandat = m.id_mandat)) AS a_acte,
        EXISTS (SELECT 1 FROM mandat s WHERE s.id_mandat_precedent = m.id_mandat) AS a_successeur,
        -- statut officiel : ADR-048 « repris fait foi ». Si un état repris existe
        -- (fait historique non recalculable, flux de rachats), il prime ; sinon on
@@ -175,7 +228,8 @@ SELECT m.*,
           WHERE mr.id_mandat = m.id_mandat),
          CASE
            WHEN m.date_resiliation IS NOT NULL THEN 'resilie'
-           WHEN EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
+           WHEN EXISTS (SELECT 1 FROM acte a WHERE a.id_mandat = m.id_mandat)   -- ADR-053
+             OR EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
                         JOIN offre_acquisition o ON o.id_offre=co.id_offre
                         JOIN proposition p ON p.id_proposition=o.id_proposition
                         WHERE p.id_mandat = m.id_mandat) THEN 'clos_succes'
@@ -208,7 +262,8 @@ CREATE VIEW v_demande AS
 SELECT d.*,
        CASE
          WHEN d.date_sans_suite IS NOT NULL THEN 'sans_suite'
-         WHEN EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
+         WHEN EXISTS (SELECT 1 FROM acte a WHERE a.id_mandat = d.id_mandat_courant)   -- ADR-053
+           OR EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
                       JOIN offre_acquisition o ON o.id_offre=co.id_offre
                       JOIN proposition p ON p.id_proposition=o.id_proposition
                       WHERE p.id_mandat = d.id_mandat_courant) THEN 'close'
