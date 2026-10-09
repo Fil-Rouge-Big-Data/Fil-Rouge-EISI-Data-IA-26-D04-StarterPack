@@ -92,3 +92,26 @@ def q1(conn, sql, params=None):
     cur = conn.execute(sql, params or ())
     row = cur.fetchone()
     return row[0] if row else None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _restore_after_all(dst_conn, migrated):
+    """Garantit qu'une migration COMPLÈTE est committée APRÈS tous les tests.
+
+    Pourquoi : le test de rollback (test_rollback_sur_echec) laisse la base vide
+    parce qu'il recharge un schéma propre, casse une table, et vérifie le rollback.
+    Sans cette fixture, les données migrées par le pipeline dans run_migration_docker.sh
+    ne sont plus dans la base quand le script se termine — l'utilisateur voit une base vide.
+    yield laisse tourner les tests, puis le teardown rejoue la migration."""
+    yield  # tous les tests tournent ici
+    # --- teardown de session : remettre les données migrées ---
+    def run_sql(conn, path):
+        with open(path, encoding="utf-8") as f:
+            conn.execute(f.read())
+    dst_conn.execute("DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;")
+    run_sql(dst_conn, SQL_OLTP / "01_ddl.sql")
+    run_sql(dst_conn, SQL_OLTP / "02_triggers_vues.sql")
+    run_sql(dst_conn, SQL_MIG / "00_staging.sql")
+    from run_migration import main as run_main
+    run_main(["--source", "historique"])
+

@@ -1,16 +1,18 @@
-# Dictionnaire des données — v8.41 (complet)
+# Dictionnaire des données — v8.41
 
-**Cible :** MPD v8.41 — `sql/01_ddl.sql`. PostgreSQL 18 (compatible 16+).
-**Portée :** 36 tables, rédigé à la main (sens métier + justification), pas un
-export de catalogue. Les contraintes clés sont indiquées ; le détail exhaustif
-est dans le DDL.
+**Cible :** MPD v8.41 — `livrables/db/01_ddl.sql`. PostgreSQL 18 (compatible 16+).
+**Portée :** 38 tables et 8 vues. Ce document est **rédigé à la main** : il porte le **sens métier** et les
+**justifications**. L'**exhaustivité** (chaque colonne : type, nullité, clés, défauts, règles) est dans le
+référentiel généré [`dictionnaire-colonnes-v841.md`](dictionnaire-colonnes-v841.md), produit depuis le DDL.
+Un contrôle automatique (`python livrables/db/verifier_dictionnaire.py`) garantit que les deux restent
+cohérents avec le schéma.
 
 > ⚠️ Entreprise et données fictives. Livrable pédagogique (RNCP40573).
 
 ## Conventions
 - **PK** = clé primaire · **FK** = clé étrangère · **UQ** = unique · **NN** = non nul.
 - Domaines applicatifs : `d_email`, `d_tel`, `d_montant` (≥0), `d_taux` (0–100),
-  `d_dpe` (A–G).
+  `d_dpe` (A–G), `d_preference` (exige / souhaite / exclut / indifferent, ADR-052).
 - Toutes les PK sont des **UUIDv7** (`DEFAULT uuidv7()`, ADR-044).
 
 ---
@@ -84,14 +86,14 @@ Spécialisation interne : affecte les demandes aux chasseurs.
 | capacite_max_leads | smallint | NN | Charge maximale ; > 0. |
 
 ## indisponibilite
-Périodes d'absence d'un chasseur (congés, etc.).
+Périodes d'indisponibilité d'un utilisateur (congé, arrêt, formation…).
 
 | Colonne | Type | Clé/NN | Sens |
 |---|---|---|---|
-| id_indisponibilite | uuid | PK | — |
-| id_chasseur | uuid | NN, FK→chasseur | — |
-| date_debut, date_fin | date | NN | Période ; fin ≥ début. |
-| motif | text | | Libre. |
+| id_utilisateur | uuid | PK, FK→utilisateur | Utilisateur indisponible (clé primaire composée avec `date_debut`). |
+| date_debut | date | PK | Début de l'indisponibilité. |
+| date_fin | date |  | Fin ; **vide = sans date de fin connue**. Si renseignée, ≥ début (`ck_indispo_dates`). |
+| motif | text | NN | conge / arret / formation / autre. |
 
 ## parrainage
 Dispositif de parrainage complet (ADR-034, source : règlement Evoriel 06/2026).
@@ -240,12 +242,75 @@ Proposition d'un bien à une demande, **sous un mandat** (ADR-045).
 | motif_rejet | text | | Requis si refuse_client. |
 | UQ partielle (id_demande,id_bien) WHERE statut vivant | | | Reproposer après baisse de prix (E4). |
 
-## commentaire, visite, note_avis, document, document_rattachement
-`commentaire` : échanges (sur demande ou proposition, une seule cible).
-`visite` : visite d'un bien (statut, annulation motivée).
-`note_avis` : conclusions du chasseur, **rattachée au mandat** (ADR-042), porte le
-montant d'offre suggéré. `document` : métadonnée média (octets hors base, MinIO).
-`document_rattachement` : liaison polymorphe document ↔ (note_avis | facture).
+## commentaire
+Échanges et mémoire métier. **Exactement une cible** parmi demande, proposition ou bien (`ck_commentaire_cible`).
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_commentaire | uuid | PK | — |
+| id_auteur | uuid | NN, FK→utilisateur | Auteur du commentaire. |
+| id_demande | uuid | FK→demande | Cible 1 : commentaire sur une demande. |
+| id_proposition | uuid | FK→proposition | Cible 2 : commentaire sur une proposition. |
+| id_bien | uuid | FK→bien | Cible 3 (v8.4) : note du chasseur sur un bien déjà tenté (mémoire métier), souvent privée. |
+| type_contexte | text | NN | note_recherche / debrief_visite / analyse_annonce / note_bien. |
+| est_prive | boolean | NN | Commentaire privé, réservé aux professionnels : un client ne peut pas en poster (trigger `tg_commentaire_prive`, RG-01). La restriction de **lecture** (RLS) n'est pas implémentée : renvoyée au fil API REST. |
+| contenu | text | NN | Texte. |
+| date_creation | timestamptz | NN | — |
+
+## visite
+Visite d'un bien proposé.
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_visite | uuid | PK | — |
+| id_proposition | uuid | NN, FK→proposition | Proposition visitée. |
+| id_visiteur | uuid | NN, FK→utilisateur | Utilisateur qui effectue la visite. |
+| date_visite | date | NN | Date de la visite. |
+| realisee | boolean | NN | La visite a-t-elle eu lieu ? |
+| motif_annulation | text |  | Requis si la visite n'a pas eu lieu (`ck_visite_annulation`, C17). |
+
+## note_avis
+Conclusions du chasseur sur un bien **qu'il a proposé**. Rattachée à la **proposition** (v8.4) : on en déduit le bien et le mandat, et on garantit que le bien a bien été proposé. Une note par proposition.
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_note | uuid | PK | — |
+| id_proposition | uuid | NN, UQ, FK→proposition | Proposition concernée ; une seule note par proposition. |
+| contenu | text |  | Conclusions rédigées. |
+| montant_offre_suggere | d_montant |  | Montant d'offre suggéré, > 0 ; pré-remplit l'offre (US06). |
+| date_redaction | timestamptz | NN | — |
+| date_mise_a_disposition | timestamptz |  | Mise à disposition du client. |
+
+## document
+Métadonnée d'un fichier. Les **octets sont hors base** (object storage MinIO/S3, ADR-042) ; la base ne garde que la référence et ce qu'il faut pour l'exploiter sans ouvrir le stockage.
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_document | uuid | PK | — |
+| type_document | text | NN | audio / video / pdf / image / autre. |
+| cle_objet | text | NN | Clé technique du fichier dans le bucket. |
+| uri | text | NN | URI d'accès (présignée ou publique). |
+| mime_type | text | NN | Type MIME exact. |
+| taille_octets | bigint | NN | Taille en octets, ≥ 0. |
+| hash_sha256 | char(64) | NN | Empreinte SHA-256 (64 hexadécimaux minuscules) : intégrité et dédoublonnage. |
+| libelle | text |  | Libellé libre. |
+| date_ajout | timestamptz | NN | — |
+
+## note_avis_document
+Liaison document ↔ note d'avis, à **vraies clés étrangères** (v8.4). Remplace la table polymorphe `document_rattachement`, supprimée.
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_note | uuid | PK, FK→note_avis | Note d'avis (clé primaire composée avec `id_document`). |
+| id_document | uuid | PK, FK→document | Document joint (média). |
+
+## facture_document
+Liaison document ↔ facture, à **vraies clés étrangères** (v8.4).
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_facture | uuid | PK, FK→facture_chasseur | Facture (clé primaire composée avec `id_document`). |
+| id_document | uuid | PK, FK→document | Document joint (ex. PDF de la facture). |
 
 ---
 
@@ -257,19 +322,50 @@ Chaîne linéaire verrouillée par triggers (ADR-045).
 | Colonne | Type | Clé/NN | Sens |
 |---|---|---|---|
 | id_offre | uuid | PK | — |
-| id_proposition | uuid | NN, FK→proposition | — |
-| camp | text | NN | acquereur / vendeur. |
+| id_proposition | uuid | NN, FK→proposition | Proposition sur laquelle porte l'offre. |
+| id_offre_precedente | uuid | FK→offre_acquisition | Offre précédente de la négociation (auto-référence). |
+| camp | text | NN | acquereur / vendeur : côté de l'offre. |
 | saisi_par | text | NN | chasseur / gestionnaire / client. |
-| montant | d_montant | NN | — |
-| date_signature, date_validite, date_reponse | date | | Si statut≠en_cours, date_reponse requise. |
-| origine_decouverte | text | | chasseur / client / tiers (droit à rémunération). |
+| montant | d_montant | NN | Montant de l'offre, > 0. |
+| date_signature | date | NN | Date de signature de l'offre. |
+| date_transmission | date |  | Date de transmission ; ≥ signature (`ck_offre_transmission`). |
+| date_validite | date | NN | Date limite de validité. |
 | statut | text | NN | en_cours / acceptee / refusee / caduque / retiree. |
+| date_reponse | date |  | Requise dès que le statut n'est plus `en_cours` (`ck_offre_reponse`, C14). |
+
+**Pas de colonne « origine de découverte »** (supprimée, ADR-049) : le droit à rémunération se dérive de
+l'existence de l'acte (un acte est toujours une vente menée par le chasseur). Une vente externe (mandat non
+exclusif, achat ailleurs) ne crée pas d'acte : elle clôt le mandat (`mandat.type_resiliation = 'vente_externe'`).
+Une seule offre acceptée par proposition (`ux_offre_acceptee`).
 
 ## compromis, acte
 `compromis` : sur une offre **acceptée** (trigger), chez un `notaire`, avec
 `clause_suspensive`. **ADR-048** : plus de statut stocké — signé/réalisé dérivés (v_compromis), `caduc` = flag `date_caducite`+motif. `acte` : sur un compromis
 **réalisé** (trigger) ; porte `montant_vente`, honoraires, et l'**encaissement**
 (`honoraires_encaisses`, `date_encaissement`) — fait générateur de la rémunération.
+
+## notaire
+Annuaire des notaires ; unique par couple nom + étude (`uk_notaire`).
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_notaire | uuid | PK | — |
+| nom | text | NN | Nom du notaire. |
+| etude | text | NN | Étude. |
+| email | d_email |  | Contact. |
+| telephone | d_tel |  | Contact. |
+
+## clause_suspensive
+Condition suspensive d'un compromis.
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_clause | uuid | PK | — |
+| id_compromis | uuid | NN, FK→compromis | Compromis concerné. |
+| type_clause | text | NN | financement / urbanisme / servitude / vente_prealable. |
+| description | text |  | Précisions libres. |
+| date_butoir | date | NN | Date limite de levée de la clause. |
+| statut | text | NN | en_attente / levee / non_levee. |
 
 ---
 
@@ -282,30 +378,50 @@ semi-ouverts `[min,max)`, **sans chevauchement** (exclusion). `parametre_honorai
 paramètres entreprise versionnés (optionnel).
 
 ## remuneration_chasseur
-Part du chasseur, **figée** au jour de l'acte.
+Part du chasseur, **figée au jour de l'acte** : toutes les valeurs de calcul sont obligatoires (insertion
+complète, pas de calcul par étapes), pour que le calcul reste reconstituable juridiquement (ADR-049).
+Une rémunération existe pour **chaque acte** : un acte est toujours une vente menée par le chasseur.
 
 | Colonne | Type | Clé/NN | Sens |
 |---|---|---|---|
 | id_remuneration | uuid | PK | — |
-| id_acte | uuid | NN, UQ, FK→acte | Un seul chasseur payé par acte (A2). |
-| id_chasseur | uuid | NN | — |
-| id_mandat | uuid | NN, FK comp.→mandat | **Le chasseur payé est celui du mandat** (S1). |
-| honoraires, taux_base, majoration_anciennete, modulation_performance, taux_final | | | Éléments de gel. |
-| montant | d_montant | NN | Rémunération finale. |
-| id_bareme_applique | uuid | FK→bareme | Barème appliqué (traçabilité). |
+| id_acte | uuid | NN, FK→acte | Acte générateur ; une seule rémunération par acte (A2). |
+| id_chasseur | uuid | NN, FK→chasseur | Chasseur rémunéré. |
+| id_mandat | uuid | NN | Mandat ; clé étrangère **composée** avec `id_chasseur` : le chasseur payé est celui du mandat (S1). |
+| honoraires | d_montant | NN | Assiette d'honoraires figée (fixe + % × prix acté). |
+| score_delai | numeric(5,2) | NN | Note 0–100 du critère « délai mandat → acte » (pondération 25). |
+| score_exclusivite | numeric(5,2) | NN | Note 0–100 du critère « exclusivité » (pondération 10). |
+| score_ventes | numeric(5,2) | NN | Note 0–100 du critère « ventes réussies » sur 12 mois (pondération 25). |
+| score_mandats | numeric(5,2) | NN | Note 0–100 du critère « mandats signés » sur 12 mois (pondération 15). |
+| score_visites | numeric(5,2) | NN | Note 0–100 du critère « visites avant achat » (pondération 25) ; le nombre de visites se **compte**, il n'est jamais stocké. |
+| score_performance | numeric(5,2) | NN | Score global 0–100 (moyenne pondérée des cinq composantes). La pondération vit dans le moteur de calcul, pas en base. |
+| taux_base | d_taux | NN | Taux de la tranche de barème appliquée. |
+| majoration_anciennete | d_taux | NN | Majoration relative d'ancienneté (+ %). |
+| modulation_performance | numeric(6,4) | NN | Modulation (± autour du pivot, relative). |
+| taux_final | d_taux | NN | Taux final, **borné à [20 ; 60] % par CHECK** (règle métier US 00/07, ajustable par migration de contrainte). |
+| montant | d_montant | NN | Rémunération finale = taux_final × honoraires. |
+| id_bareme_applique | uuid | NN, FK→bareme | Barème appliqué, figé (traçabilité). |
+| date_calcul | timestamptz | NN | Instant du calcul (gel). |
+| date_annulation | date |  | Annulation exceptionnelle : posée **avec** `motif_annulation` (`ck_remun_annulation`). Pas de statut. |
+| motif_annulation | text |  | Motif de l'annulation. |
 
 ## facture_chasseur
-Cycle de facturation / paiement.
+Cycle de facturation / paiement (workflow humain : ces statuts sont des **faits de gestion**, non dérivables).
 
 | Colonne | Type | Clé/NN | Sens |
 |---|---|---|---|
 | id_facture | uuid | PK | — |
-| id_remuneration | uuid | NN, FK→remuneration_chasseur | — |
-| numero | text | NN, UQ | — |
-| montant | d_montant | NN | — |
+| id_remuneration | uuid | NN, UQ, FK→remuneration_chasseur | Rémunération facturée. **Une seule facture par rémunération** (pas de double facturation). |
+| numero | text | NN, UQ | Numéro de facture, unique. |
+| montant | d_montant | NN | Montant facturé. |
+| date_emission | date | NN | — |
 | statut | text | NN | soumise / verifiee_conforme / rejetee. |
-| statut_paiement | text | | programme / paye (si conforme). |
-| date_emission, date_programmation, date_paiement | date | | — |
+| date_verification | date |  | Requise dès que le statut n'est plus `soumise` (`ck_facture_verif`). |
+| id_verificateur | uuid | FK→gestionnaire | Gestionnaire qui a vérifié la facture. |
+| motif_rejet | text |  | Requis si la facture est rejetée (`ck_facture_rejet`). |
+| statut_paiement | text |  | programme / paye ; seulement si la facture est conforme (`ck_facture_paiement`). |
+| date_programmation | date |  | Date de paiement programmée. |
+| date_paiement | date |  | Requise si le statut de paiement est `paye` (`ck_facture_paye`). |
 
 ---
 
@@ -331,8 +447,19 @@ Cycle de facturation / paiement.
 | taux_honoraires, forfait_honoraires | | | Taux OU forfait requis (ck_mandat_remun). |
 | base_honoraires, taux_tva | | NN | HT/TTC, TVA. |
 | qualite_signataire, reference_procuration | | | nom_propre / procuration (référence requise si procuration). |
-| date_resiliation, motif_resiliation | | | Requis si statut=resilie. |
+| date_resiliation, type_resiliation | date, text | | **Fin anticipée** : posées ensemble (`ck_mandat_resil`), aucun statut stocké. `type_resiliation` : abandon_client / abandon_chasseur / vente_externe / non_conformite / autre. `vente_externe` = le client (mandat non exclusif) a acheté ailleurs : le mandat se clôt **sans acte** (ADR-049). |
+| motif_resiliation | text | | Détail libre (ex. reprise de migration à requalifier). |
 | UQ (id_mandat,id_demande) et (id_mandat,id_chasseur) | | | Cibles des FK composées (proposition, rémunération). |
+
+## mandat_reprise
+**État repris à la migration** (ADR-051, ex-`mandat_etat`). Donnée **transactionnelle non recalculable** : un mandat racheté dont on sait qu'il a abouti, mais dont l'acte n'a pas été repris. Lue par `v_mandat`, où elle **fait foi** sur le calcul. Le cache d'état « calculé » n'existe plus en OLTP : il relève de l'OLAP (ADR-051).
+
+| Colonne | Type | Clé/NN | Sens |
+|---|---|---|---|
+| id_mandat | uuid | PK, FK→mandat | Mandat concerné. |
+| statut_repris | text | NN | actif / echu / renouvele / resilie / clos_succes. |
+| source | text | NN | Source de la reprise (traçabilité). |
+| date_reprise | timestamptz | NN | Instant de la reprise. |
 
 ## indicateur, periode, observation, objectif
 Suivi de performance (alimente l'OLAP, ADR-036). `indicateur` : définition d'un
@@ -343,27 +470,23 @@ d'un indicateur sur une période. `objectif` : cible d'un indicateur.
 
 ## Annexe — Vues (dérivées, non stockées)
 
-Voir `dossier-modelisation-v82.md` §6. Les vues calculent l'expiration (mandat),
-la conformité (chasseur), l'assiette d'honoraires, la version courante et la
-charge gestionnaire, via `date_reference()` pour la reproductibilité (ADR-047).
+**Aucun statut de progression n'est stocké** (ADR-048) : il se calcule, par des vues, à partir des faits
+(dates, filiation, existence d'un acte). La date de contrôle vient de `date_reference()` (reproductibilité, ADR-047).
 
-## mandat_etat (ADR-048 §3)
-Projection d'état du mandat. Active en v8.41, justifiée par le flux récurrent de rachats :
-une partie de l'état (le « repris ») n'est pas calculable faute de faits, et un besoin
-métier récurrent l'impose.
-
-| Colonne | Type | Clé/NN | Sens |
-|---|---|---|---|
-| id_mandat | uuid | PK, FK→mandat | — |
-| statut | text | NN | actif/echu/renouvele/resilie/clos_succes. |
-| origine | text | NN | `repris` (fait historique non recalculable, fait foi, jamais écrasé) ou `calcule` (cache régénérable). |
-| date_calcul | timestamptz | NN | — |
-
-Règle : dans v_mandat, un état `origine='repris'` prime sur le calcul ; sinon l'état est dérivé des faits.
+| Vue | Ce qu'elle calcule |
+|---|---|
+| `v_mandat` | `date_fin`, `est_expire`, `a_acte`, `a_successeur` et `statut_calcule` ∈ actif / echu / clos_succes / renouvele / resilie. **Un état repris (`mandat_reprise`) fait foi** sur le calcul. |
+| `v_mandat_actif` | Les mandats dont `statut_calcule` vaut `actif`. |
+| `v_demande` | `statut_calcule` du cycle de la demande ∈ en_recherche / qualifie / affecte / close / sans_suite (flag stocké : `date_sans_suite` + motif). |
+| `v_compromis` | `statut_calcule` ∈ signe / realise / caduc (caduc = flag stocké `date_caducite` + motif ; réalisé = il existe un acte). |
+| `v_version_courante` | La version de critères en vigueur par demande (celle au `no_version` maximal). |
+| `v_honoraires` | `honoraires_total` : assiette d'honoraires par acte (arrondie). |
+| `v_conformite_chasseur` | `habilitation_expiree`, `rcp_expiree`, `mandat_hors_habilitation`, `est_a_regulariser`. |
+| `v_charge_gestionnaire` | `leads_en_cours` et `taux_charge` (leads en cours / capacité maximale). |
 
 ---
 
-# Évolutions v8.41 (par rapport à v8.3)
+# Évolutions v8.4 (par rapport à v8.3)
 
 | Table | Changement |
 |---|---|
@@ -375,6 +498,7 @@ Règle : dans v_mandat, un état `origine='repris'` prime sur le calcul ; sinon 
 | `note_avis` | Rattachée à **`id_proposition`** (au lieu de mandat+bien). |
 | `document_rattachement` | **Supprimé** → remplacé par `note_avis_document` + `facture_document` (vraies FK). |
 | `commentaire` | 3ᵉ cible `id_bien` (note métier chasseur) ; type `note_bien`. |
+| `mandat_etat` | Scindée (ADR-051) : renommée **`mandat_reprise`** (état repris seul, colonne `origine` supprimée) ; le cache d'état calculé relève de l'OLAP. |
 
 Migration (ADR-050) : UUID préfixés par source (anti-collision multisource), transaction unique + journal indépendant, validation bloquante, staging sans DROP (historique préservé), parsing allégé (critères ambigus non forcés).
 

@@ -23,6 +23,8 @@ else echo "Python 3 introuvable (essayé : python3, python)." >&2; exit 1; fi
 CONTAINER=chasse_oltp
 DB=chasse_v8
 USER=chasse_migration
+HOTE="${CHASSE_HOTE:-127.0.0.1}"
+PORT="${CHASSE_OLTP_PORT:-5433}"
 
 echo "Attente que PostgreSQL soit prêt..."
 until docker exec "$CONTAINER" pg_isready -U "$USER" -d "$DB" >/dev/null 2>&1; do
@@ -47,3 +49,17 @@ echo "Exécution de la batterie de tests..."
 # PSQL_DOCKER_CONTAINER : psql est exécuté DANS le conteneur (aucun client psql requis sur l'hôte).
 PSQL_DOCKER_CONTAINER="$CONTAINER" PGUSER="$USER" PGDATABASE="$DB" \
   "$PY" livrables/db/run_tests.py
+
+echo
+echo "Cohérence de la documentation avec le schéma..."
+"$PY" livrables/db/verifier_dictionnaire.py
+
+echo
+echo "Sondes (anti-régression intégrité)..."
+PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" PGPASSWORD="$POSTGRES_PASSWORD" \
+  "$PY" livrables/db/run_sondes.py
+
+echo
+echo "Tests d'anonymisation RGPD..."
+REQUIRE_DB=1 DST_PGHOST="$HOTE" DST_PGPORT="$PORT" DST_PGUSER="$USER" DST_PGDATABASE="$DB" DST_PGPASSWORD="${POSTGRES_PASSWORD:-}" \
+  "$PY" -m pytest livrables/jobs/anonymisation -q
