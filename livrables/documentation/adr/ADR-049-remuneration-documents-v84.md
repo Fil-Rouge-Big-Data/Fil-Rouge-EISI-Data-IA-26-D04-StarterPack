@@ -37,33 +37,38 @@ existe ⟺ le droit est ouvert**. Rien à vérifier, rien à stocker.
 > *est* la preuve du droit. On retire deux colonnes (`origine_decouverte`,
 > `droit_ouvert` envisagé) et une contrainte conditionnelle.
 
-**Clarification (relecture v8.41) — mandat exclusif, mandat non exclusif et « trouvé par le client ».**
+**Clarification (relecture v8.41) — vente hors dispositif sous mandat exclusif.**
 
-Le README du prof distingue deux cas :
-- **mandat exclusif** : « même si le client trouve seul, le chasseur sera rémunéré » ;
-- **mandat non exclusif** : « le chasseur pourra ne pas être rémunéré ».
+Le `.feature 00` (l. 15-19) et le `.feature 10` (l. 40) établissent que sous mandat **exclusif**, le
+client qui achète en dehors du dispositif du chasseur ouvre **quand même** le droit à rémunération.
+Le `.feature 00` (l. 42-48) précise que le notaire, informé du mandat, collecte les honoraires : une
+vente externe produit donc bien un **acte authentique**.
 
-Le modèle OLTP ne porte **aucune garde** sur cette distinction : la base ne sait pas qui a trouvé
-le bien. C'est voulu — `origine_decouverte` a été retirée. Le droit à rémunération se lit
-uniquement dans l'existence de l'acte. Voici comment les deux cas s'expriment :
+**Erreur corrigée.** La version précédente de cette section affirmait qu'une vente externe ne crée
+jamais d'acte. C'est faux pour le mandat exclusif. Le tableau correct est :
 
-| Situation | Mandat exclusif | Mandat non exclusif |
-| --- | --- | --- |
-| Vente menée par le chasseur (proposition → offre → compromis → acte) | Acte créé → rémunération | Acte créé → rémunération |
-| Client trouve seul et achète via le chasseur | L'**API crée l'acte** (le mandat exclusif garantit la rémunération) → rémunération | L'**API décide** : elle peut créer l'acte ou non selon la politique commerciale |
-| Client achète ailleurs (autre agence, PAP) | Impossible : la vente passe par un autre notaire, pas d'acte chez nous → `type_resiliation = 'vente_externe'` | Idem → `type_resiliation = 'vente_externe'` |
+| Exclusivité | Origine de la vente | Droit à rémunération | Acte créé ? |
+| --- | --- | --- | --- |
+| exclusif | le chasseur | ouvert | oui (chaîne proposition → compromis → acte) |
+| exclusif | le client, en dehors du dispositif | **ouvert** | **oui** (acte sans compromis amont, rattaché au mandat) |
+| exclusif | le client achète via une autre agence | **ouvert** | **oui** (même logique : le notaire est informé du mandat) |
+| non-exclusif | le chasseur | ouvert | oui (chaîne complète) |
+| non-exclusif | le client, en dehors du dispositif | **fermé** | non → résiliation `vente_externe` |
+| non-exclusif | un chasseur d'une autre agence | **fermé** | non → résiliation `vente_externe` |
 
-**La garde est métier, pas structurelle.** C'est l'application (API) qui décide de créer l'acte
-quand le client a trouvé seul. Sur un mandat exclusif, elle **doit** le créer (le contrat
-l'impose) ; sur un mandat non exclusif, elle **peut** ne pas le créer. La base n'a pas à connaître
-cette règle : elle garantit seulement que si un acte existe, la rémunération est complète et
-reconstituable.
+**Impact sur le schéma (v8.42, pas dans cette PR) :**
+- `acte.id_compromis` devient **nullable** ; ajout de `acte.id_mandat` (FK → `mandat`) ;
+- exactement un des deux renseigné : `CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL))` ;
+- **trigger** : un acte sans compromis n'est accepté que sur un mandat **exclusif en cours de
+  validité** à la date de l'acte (garde d'exclusivité, test T-DR-01, CDC PO-11) ;
+- `v_mandat` (`a_acte`, `clos_succes`) et `v_demande` (`close`) reconnaissent les deux chemins ;
+- convention des scores gelés pour une vente externe : `score_visites` = 0 (aucune visite du
+  chasseur), les autres composantes reflètent l'historique du chasseur sur ce mandat ;
+- MCD, MLD, MPD, dictionnaire, `verifier_dictionnaire.py` à mettre à jour (acte–compromis passe
+  de 1,1 à 0,1 ; nouvelle association acte–mandat).
 
-La chaîne `proposition → offre → compromis → acte` **n'est pas une fiction** dans le cas
-« client trouve seul, mandat exclusif » : le bien trouvé par le client est tout de même proposé
-(le chasseur le valide), l'offre est formalisée, le compromis signé et l'acte passé. C'est le
-parcours réel, documenté par le notaire. Les scores du chasseur (délai, visites) reflètent la
-réalité de ce parcours, pas un parcours inventé.
+**Dans cette PR (v8.41) :** documentation seule. Le commentaire DDL sur `vente_externe` est corrigé
+pour ne plus réserver ce type au non-exclusif. Le schéma changera en v8.42.
 
 Si un acte est créé à tort, la rémunération peut être annulée (`date_annulation` +
 `motif_annulation`), mais la base ne refuse pas l'insertion.

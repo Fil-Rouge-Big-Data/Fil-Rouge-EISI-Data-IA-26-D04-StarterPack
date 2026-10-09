@@ -312,8 +312,9 @@ CREATE TABLE mandat (
     qualite_signataire     text NOT NULL CHECK (qualite_signataire IN ('nom_propre','procuration')),
     reference_procuration  text,
     date_resiliation       date,
-    -- ADR-049 : type de fin anticipée contrôlé. 'vente_externe' = le client (mandat
-    -- non exclusif) a acheté ailleurs -> le mandat se clôt sans acte chez nous.
+    -- ADR-049 : type de fin anticipée. 'vente_externe' = le client a acheté hors
+    -- dispositif. Mandat NON exclusif : pas d'acte, le mandat se clôt. Mandat
+    -- EXCLUSIF : droit ouvert, acte créé sans compromis (v8.42, ADR-049 §2.3).
     type_resiliation       text CHECK (type_resiliation IN ('abandon_client','abandon_chasseur','vente_externe','non_conformite','autre')),
     motif_resiliation      text,   -- détail libre (ex. reprise migration à requalifier)
     CONSTRAINT fk_mandat_version   FOREIGN KEY (id_demande, id_version_contractuelle)
@@ -510,9 +511,10 @@ CREATE TABLE offre_acquisition (
     camp              text NOT NULL CHECK (camp IN ('acquereur','vendeur')),
     saisi_par         text NOT NULL CHECK (saisi_par IN ('chasseur','gestionnaire','client')),
     -- ADR-049 : origine_decouverte SUPPRIMÉ. Le droit à rémunération se dérive de
-    -- l'existence de l'acte : un acte n'existe que si la vente a été menée par le
-    -- chasseur (chaîne proposition->offre->compromis->acte). Les ventes externes
-    -- (non exclusif, achat ailleurs) ne créent pas d'acte -> motif 'vente_externe'.
+    -- l'existence de l'acte. Chaîne standard : proposition->offre->compromis->acte.
+    -- Mandat exclusif + vente hors dispositif : acte SANS compromis, rattaché
+    -- directement au mandat (v8.42, ADR-049 §2.3). Mandat non exclusif + vente
+    -- hors dispositif : pas d'acte, résiliation 'vente_externe'.
     montant           d_montant NOT NULL CHECK (montant > 0),
     date_signature    date NOT NULL,
     date_transmission date,
@@ -638,9 +640,10 @@ CREATE TABLE remuneration_chasseur (
     id_chasseur      uuid NOT NULL REFERENCES chasseur(id_utilisateur),
     id_mandat        uuid NOT NULL,                              -- A1/S1 : mandat à l'origine (FK composée ci-dessous)
     -- ADR-049 : GEL COMPLET figé au jour de l'acte. Une rémunération existe pour
-    -- CHAQUE acte, et un acte = toujours une vente du chasseur (les ventes externes
-    -- ne créent pas d'acte : elles closent le mandat, motif 'vente_externe').
-    -- Donc : une rémunération = un droit ouvert. Pas de droit_ouvert à vérifier.
+    -- CHAQUE acte. Mandat non exclusif : un acte n'existe que si le chasseur a mené
+    -- la vente. Mandat exclusif : un acte existe aussi pour une vente hors dispositif
+    -- (v8.42 : acte sans compromis, ADR-049 §2.3). Dans les deux cas :
+    -- rémunération = droit ouvert. Pas de droit_ouvert à stocker.
     -- R1 : colonnes de gel NOT NULL (insert complet, pas de calcul par étapes).
     honoraires            d_montant NOT NULL,                    -- assiette = fixe + % * prix_acté
     -- R4 : les 5 COMPOSANTES du score conservées (gel complet, reconstituable juridiquement),
