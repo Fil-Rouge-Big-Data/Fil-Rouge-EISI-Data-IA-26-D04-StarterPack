@@ -23,11 +23,14 @@ entreprise, données et personnages **fictifs**. Date de référence : **25 juil
 - **Base OLTP v8.41**, PostgreSQL 18 (compatible 16+), schéma `public`, clés
   **UUIDv7**. **38 tables, 8 vues**, DDL rejouable/transactionnel, testé.
 - **Migration** de l'existant (base héritée) vers l'OLTP : pipeline **E-T-L-V**
-  idempotent, **récurrent** (prévu pour les rachats, ADR-001), journal d'anomalies.
+  idempotent, **récurrent** (flux de rachats confirmé par le PO, voir ADR-050), journal d'anomalies.
 - **Job d'anonymisation RGPD** (routage prospect/client/transactionnel), DAG Airflow fourni.
-- **Documentation** : 20 ADR, Merise complet (MCD, MLD, MPD, dictionnaire), tous v8.41.
-- **Tests** : harnais de contraintes probant (23 rejets + 5 valides), batterie de
-  sondes (5), migration (43), anonymisation (6).
+- **Documentation** : 32 ADR ; Merise v8.41 (MCD, MLD, MPD, dictionnaire rédigé à la main **et** référentiel
+  exhaustif des colonnes généré depuis le DDL). Un contrôle automatique
+  (`python livrables/db/verifier_dictionnaire.py`) vérifie qu'ils décrivent le schéma réel.
+- **Tests** : harnais de contraintes (23 rejets, **chacun par la contrainte attendue**, + 4 valides),
+  12 sondes, 48 tests de migration, 7 tests d'anonymisation.
+- **Environnement** : Docker Compose durci, voir `LANCEMENT-DOCKER.md` (même dossier).
 
 Le dépôt Git est la source de vérité du code. Ce fil **consomme** ce socle.
 
@@ -48,12 +51,12 @@ vues, à partir des faits. Conséquence directe pour toi :
 - `demande.id_mandat_courant` désigne le mandat en cours (fait de gestion).
 - La version de critères courante = `v_version_courante` (max `no_version`).
 
-### 3.2 Projection d'état `mandat_etat` (ADR-048 §3)
-Table qui matérialise l'état du mandat. `origine='repris'` = fait historique non
-recalculable (migrations de rachats), **fait foi**, jamais écrasé. `origine='calcule'`
-= cache régénérable. **Un job de rafraîchissement incrémental** (à construire côté
-Airflow) alimente les lignes `calcule` de la frange volatile — c'est un chantier
-orchestration naturel.
+### 3.2 État repris à la migration : `mandat_reprise` (ADR-051)
+Table OLTP qui ne porte **que** l'état *repris* à la migration (`statut_repris`, `source`, `date_reprise`) :
+un mandat racheté dont on sait qu'il a abouti, mais dont l'acte n'a pas été repris. C'est une donnée
+**transactionnelle non recalculable**, lue par `v_mandat`, où elle **fait foi** sur le calcul. L'ancienne
+table `mandat_etat` et son cache « calculé » n'existent plus : la projection de performance relève de l'OLAP
+(voir §8.1).
 
 ### 3.3 Autres doctrines
 - **Frontière OLTP/OLAP (ADR-025, 036)** : l'OLTP ne porte pas les mesures
@@ -87,12 +90,13 @@ Lis ceci avant de coder quoi que ce soit contre le schéma :
 ## 4. Repères techniques par fil
 
 ### Airflow / orchestration
-- Patron de DAG fourni : `jobs/anonymisation/dag_anonymisation_rgpd.py` (Python qui
+- Patron de DAG fourni : `livrables/jobs/anonymisation/dag_anonymisation_rgpd.py` (Python qui
   déclenche un traitement et journalise).
 - Deux jobs naturels : (a) **anonymisation RGPD** quotidienne (existe), (b)
-  **rafraîchissement `mandat_etat`** incrémental (à construire, ADR-048 §3).
+  **alimentation de l'OLAP** (projection de performance, à construire, ADR-051).
 - La **migration récurrente** (rachats) est elle-même un workflow orchestrable
-  (`migration/src/run_migration.py`, paramétrable par `config/sources.yml`).
+  (`livrables/migration/src/run_migration.py`, paramétrable par
+  `livrables/migration/config/sources.yml`).
 
 ### API REST / backend
 - Stack cohérente : **Python** ; si ORM, **SQLAlchemy + Alembic** (versionnement
@@ -103,25 +107,28 @@ Lis ceci avant de coder quoi que ce soit contre le schéma :
 
 ### MinIO / object storage (ADR-042)
 - Les fichiers média (note d'avis audio/vidéo, documents) vivent **hors OLTP**.
-  La base ne stocke qu'une **URI** dans `document.uri`. MinIO (compatible S3) est
-  retenu ; décision d'infra à finaliser côté backend.
-- `note_avis` est rattachée au **mandat** ; `document_rattachement` est polymorphe
-  (note_avis | facture_chasseur).
+  La base ne stocke que la **référence** (`document.cle_objet`, `document.uri`) et les métadonnées
+  (`mime_type`, `taille_octets`, `hash_sha256`). MinIO (compatible S3) est retenu ; décision d'infra à
+  finaliser côté backend.
+- `note_avis` est rattachée à la **proposition** ; les documents sont liés aux notes et aux factures par
+  `note_avis_document` et `facture_document` (vraies clés étrangères : le rattachement polymorphe
+  `document_rattachement` n'existe plus).
 
 ### OLAP / Power BI
 - Partir des **vues** (`v_mandat`, `v_demande`, `v_charge_gestionnaire`…) et de
-  `mandat_etat` pour les états.
+  `mandat_reprise` (états repris).
 - Les indicateurs agrégés (délais, performance) se calculent **côté OLAP**, pas en
-  vue OLTP (ADR-036). Voir `merise/olap-v7-articulation.png`.
+  vue OLTP (ADR-036). Voir `livrables/documentation/merise/olap-articulation.png`.
 
 ## 5. Fichiers à joindre selon le fil
 
-- **Tous** : `sql/01_ddl.sql`, `sql/02_triggers_vues.sql`, `merise/mpd-v83.md`,
-  `merise/dictionnaire-donnees-v83.md`.
-- **Airflow** : `migration/src/`, `jobs/anonymisation/`, ADR-048 (§3), ADR-043, ADR-001.
-- **API** : ADR-045 (intégrité), ADR-048 (états dérivés), ADR-039 (gel), le dictionnaire.
-- **MinIO** : ADR-042, tables `document`/`document_rattachement`/`note_avis`.
-- **OLAP** : ADR-025, ADR-036, `olap-v7-articulation.png`, les vues.
+- **Tous** : `livrables/db/01_ddl.sql`, `livrables/db/02_triggers_vues.sql`,
+  `livrables/documentation/merise/mpd-v841.md`, `dictionnaire-donnees-v841.md` et
+  `dictionnaire-colonnes-v841.md` (même dossier).
+- **Airflow** : `livrables/migration/src/`, `livrables/jobs/anonymisation/`, ADR-051, ADR-050, ADR-043.
+- **API** : ADR-045 (intégrité), ADR-048 (états dérivés), ADR-039 (gel), ADR-052 (préférences), le dictionnaire.
+- **MinIO** : ADR-042, ADR-049, tables `document`, `note_avis_document`, `facture_document`, `note_avis`.
+- **OLAP** : ADR-025, ADR-036, ADR-051, `olap-articulation.png`, les vues.
 
 ## 6. Ce que j'attends de l'assistant dans ce fil
 
@@ -133,6 +140,9 @@ Lis ceci avant de coder quoi que ce soit contre le schéma :
 - Pour les tests : écrire aussi des **tests négatifs / sondes** (tenter l'interdit),
   pas seulement des cas valides.
 - Respecter les doctrines du §3.
+- **Quand le schéma change** : régénérer le référentiel des colonnes
+  (`python livrables/db/generer_dictionnaire_colonnes.py`), mettre à jour le dictionnaire rédigé, puis lancer
+  `python livrables/db/verifier_dictionnaire.py` : il échoue si la documentation dérive du schéma.
 
 ## 7. Limite connue (transparence)
 
@@ -165,11 +175,11 @@ mandats, alimentée par un DAG Airflow lisant `v_mandat`.
   uniquement** — la vue OLTP `v_delai_affectation` a été retirée exprès (ADR-036).
 
 ### 8.4 Jobs Airflow naturels (DAG)
-- Anonymisation RGPD quotidienne (existe : `jobs/anonymisation/`).
+- Anonymisation RGPD quotidienne (existe : `livrables/jobs/anonymisation/`).
 - **Alimentation OLAP** (nouveau) : extraire les vues OLTP -> transformer -> charger
   l'étoile ; rafraîchir la projection de performance des mandats (volet « calcule »
   de l'ADR-051, rafraîchissement incrémental sur la frange volatile).
-- Migration récurrente des rachats (`migration/`, paramétrable par `sources.yml`).
+- Migration récurrente des rachats (`livrables/migration/`, paramétrable par `sources.yml`).
 
 ### 8.5 Doctrine à respecter côté OLAP
 - L'OLAP **dérive** de l'OLTP, jamais l'inverse. Reconstruire l'OLAP ne doit rien
@@ -186,6 +196,7 @@ mandats, alimentée par un DAG Airflow lisant `v_mandat`.
 | **Projection de performance** (cache d'état des mandats) | OLAP / Airflow | ADR-051. |
 | **Test « client transactionnel » + contrôle croisé budget (A03b)** | Collègue → v8.42 | Déjà écrits sur l'ancien modèle ; à reporter après adaptation. |
 | **Réconciliation d'identité à la migration** : un compte déjà présent dans l'OLTP (créé par l'application, UUIDv7) avec le même e-mail qu'une personne du portefeuille repris (UUIDv5 déterministe) | Migration récurrente (croissance) | Constaté en pratique : le pipeline échoue proprement (transaction unique, rien d'écrit) sur `utilisateur_email_key`. Il faudra décider quoi faire : réutiliser l'identifiant existant (fusion), journaliser une anomalie et ignorer, ou refuser. Ne change pas le modèle ; à traiter dans l'ADR « stratégie d'upsert ». |
+| **Numérotation des ADR** : numéros « proposés » (031 à 035) jamais figés, et **collision ADR-031** (critères d'équipement dans le dossier v7, chaîne de rémunération dans `ADR-remuneration-chasseur.md`) | Documentation | À renuméroter, puis aligner les commentaires du DDL qui citent « ADR-031 » pour les éléments de gel de la rémunération. Note : l'ADR-001 du dépôt est celui du prof (« Séparer OLTP et OLAP »), pas un ADR de l'équipe. |
 | **Fusion anonymisation** (nos gardes + sa détection à 6 sources) | v8.42 | Fusion réelle, à adapter au schéma v8.41. |
 | **Habilitation** (ajouts du collègue sur ancien modèle `numero_carte_t`) | v8.42 | À reporter sur le modèle ADR-046. |
 | **Suites de tests collègue** (25 rejets / 5 scénarios) | v8.42 | À additionner après adaptation au modèle v8.41. |

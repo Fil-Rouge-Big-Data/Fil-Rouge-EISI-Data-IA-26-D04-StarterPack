@@ -1,4 +1,4 @@
-# Paramétrage des sources de migration (ADR-001 : migration récurrente).
+# Paramétrage des sources de migration (migration récurrente, ADR-050).
 # Chaque source déclare comment l'atteindre et son label de traçage.
 sources:
   historique:

@@ -37,6 +37,16 @@ existe ⟺ le droit est ouvert**. Rien à vérifier, rien à stocker.
 > *est* la preuve du droit. On retire deux colonnes (`origine_decouverte`,
 > `droit_ouvert` envisagé) et une contrainte conditionnelle.
 
+**Clarification (relecture v8.41) — mandat non exclusif et bien trouvé par le client.**
+Le modèle n'interdit pas d'insérer un acte (et donc une rémunération) sur un mandat non exclusif
+lorsque le bien a été trouvé par le client lui-même, sans matching du chasseur. C'est **voulu** :
+la vente fait foi. Si un acte existe, c'est que la vente a transité par la chaîne du chasseur
+(proposition → offre → compromis → acte) et que le notaire l'a instrumentée. La base ne connaît
+pas la notion de « trouvé par qui » : `origine_decouverte` a été retirée précisément pour cette
+raison. La garde est **métier, pas structurelle** : c'est l'application (API) qui décide de créer
+ou non l'acte selon le contexte de l'offre. Si un acte est créé à tort, la rémunération peut être
+annulée (`date_annulation` + `motif_annulation`), mais la base ne refuse pas l'insertion.
+
 ### 2.4 Facturation (point mineur)
 `facture_chasseur` : `UNIQUE(id_remuneration)` (pas de double facturation) +
 cycle de vérification tracé (`date_verification`, `id_verificateur`, `motif_rejet`).
@@ -58,3 +68,30 @@ cycle de vérification tracé (`date_verification`, `id_verificateur`, `motif_re
 
 ## 4. Rattachement RNCP40573
 BC01 (décisions tracées), BC03 (intégrité SGBD, gel juridique), BC05 (données fiables pour l'aval).
+
+## 5. Convention de comptage des visites (relecture v8.41)
+
+**Contexte.** La table `visite` porte un `id_visiteur → utilisateur` sans unicité par proposition ou
+par date : deux personnes (le chasseur et le client, un couple d'acquéreurs) peuvent visiter le même
+bien le même jour et produire chacune une ligne.
+
+**Convention retenue.** Une visite est un **fait par participant**. Le score de visites du chasseur
+(`score_visites`, pondération 25) se calcule en comptant les **visites réalisées par le client** sur
+les propositions du mandat concerné, sur les 12 mois glissants précédant l'acte :
+
+```sql
+SELECT count(*)
+FROM visite v
+JOIN proposition p ON p.id_proposition = v.id_proposition
+WHERE p.id_mandat = :id_mandat
+  AND v.realisee = true
+  AND EXISTS (SELECT 1 FROM client c WHERE c.id_utilisateur = v.id_visiteur)
+  AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
+```
+
+Ce comptage est une **règle OLAP** (ou du moteur de calcul de la rémunération), pas une contrainte
+d'intégrité. La base ne porte pas de `UNIQUE` sur `(id_proposition, date_visite)` : cela interdirait
+les visites à deux (couple acquéreur, chasseur + client), qui sont le cas majoritaire.
+
+**Alternative écartée.** Ajouter une unicité `(id_proposition, date_visite, id_visiteur)` empêcherait
+un même visiteur de revenir le même jour (contre-visite de contrôle), sans bénéfice pour l'intégrité.

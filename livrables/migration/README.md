@@ -1,7 +1,7 @@
 # Migration des données — Existant → OLTP cible v8
 
 Module de migration du système hérité (schéma `Fil_Rouge_Depart`) vers la base
-OLTP cible v8. Conçu **récurrent et paramétrable par source** (ADR-001) : le
+OLTP cible v8. Conçu **récurrent et paramétrable par source** (ADR-050) : le
 premier run traite l'existant ; les rachats futurs réutilisent le même pipeline.
 
 > ⚠️ Entreprise, données et personnages fictifs. Livrable pédagogique (RNCP40573).

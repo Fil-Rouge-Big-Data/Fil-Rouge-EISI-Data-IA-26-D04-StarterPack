@@ -1,5 +1,7 @@
 # ADR — Chaîne de rémunération du chasseur (barème, calcul, facturation, paiement)
 
+> ℹ️ **Règle du droit à rémunération révisée par ADR-049 (v8.4).** La colonne `origine_decouverte` est supprimée : le droit se dérive de l'existence de l'acte (un acte est toujours une vente menée par le chasseur ; une vente externe ne crée pas d'acte). La pondération du score (délai 25 · exclusivité 10 · ventes 25 · mandats 15 · visites 25) reste la référence ; ses composantes sont précisées par ADR-052.
+
 > **Numéro :** à figer avec le lot d'ADR (proposé : ADR-031) · **Statut :** Accepté
 > **Date :** 2026-10-02 · **Date de référence projet :** 25 juillet 2026
 > **Remplace/étend :** ADR-029 (barème reporté « point ouvert PO »)
