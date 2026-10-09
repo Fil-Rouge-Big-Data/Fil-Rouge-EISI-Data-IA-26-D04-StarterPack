@@ -1,0 +1,12 @@
+{
+  "name": "Chasse immobilière — OLTP v8",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "service": "postgres-oltp",
+  "workspaceFolder": "/workspace",
+  "forwardPorts": [5433, 5434],
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ckolkman.vscode-postgres"]
+    }
+  }
+}
