@@ -37,15 +37,36 @@ existe ⟺ le droit est ouvert**. Rien à vérifier, rien à stocker.
 > *est* la preuve du droit. On retire deux colonnes (`origine_decouverte`,
 > `droit_ouvert` envisagé) et une contrainte conditionnelle.
 
-**Clarification (relecture v8.41) — mandat non exclusif et bien trouvé par le client.**
-Le modèle n'interdit pas d'insérer un acte (et donc une rémunération) sur un mandat non exclusif
-lorsque le bien a été trouvé par le client lui-même, sans matching du chasseur. C'est **voulu** :
-la vente fait foi. Si un acte existe, c'est que la vente a transité par la chaîne du chasseur
-(proposition → offre → compromis → acte) et que le notaire l'a instrumentée. La base ne connaît
-pas la notion de « trouvé par qui » : `origine_decouverte` a été retirée précisément pour cette
-raison. La garde est **métier, pas structurelle** : c'est l'application (API) qui décide de créer
-ou non l'acte selon le contexte de l'offre. Si un acte est créé à tort, la rémunération peut être
-annulée (`date_annulation` + `motif_annulation`), mais la base ne refuse pas l'insertion.
+**Clarification (relecture v8.41) — mandat exclusif, mandat non exclusif et « trouvé par le client ».**
+
+Le README du prof distingue deux cas :
+- **mandat exclusif** : « même si le client trouve seul, le chasseur sera rémunéré » ;
+- **mandat non exclusif** : « le chasseur pourra ne pas être rémunéré ».
+
+Le modèle OLTP ne porte **aucune garde** sur cette distinction : la base ne sait pas qui a trouvé
+le bien. C'est voulu — `origine_decouverte` a été retirée. Le droit à rémunération se lit
+uniquement dans l'existence de l'acte. Voici comment les deux cas s'expriment :
+
+| Situation | Mandat exclusif | Mandat non exclusif |
+| --- | --- | --- |
+| Vente menée par le chasseur (proposition → offre → compromis → acte) | Acte créé → rémunération | Acte créé → rémunération |
+| Client trouve seul et achète via le chasseur | L'**API crée l'acte** (le mandat exclusif garantit la rémunération) → rémunération | L'**API décide** : elle peut créer l'acte ou non selon la politique commerciale |
+| Client achète ailleurs (autre agence, PAP) | Impossible : la vente passe par un autre notaire, pas d'acte chez nous → `type_resiliation = 'vente_externe'` | Idem → `type_resiliation = 'vente_externe'` |
+
+**La garde est métier, pas structurelle.** C'est l'application (API) qui décide de créer l'acte
+quand le client a trouvé seul. Sur un mandat exclusif, elle **doit** le créer (le contrat
+l'impose) ; sur un mandat non exclusif, elle **peut** ne pas le créer. La base n'a pas à connaître
+cette règle : elle garantit seulement que si un acte existe, la rémunération est complète et
+reconstituable.
+
+La chaîne `proposition → offre → compromis → acte` **n'est pas une fiction** dans le cas
+« client trouve seul, mandat exclusif » : le bien trouvé par le client est tout de même proposé
+(le chasseur le valide), l'offre est formalisée, le compromis signé et l'acte passé. C'est le
+parcours réel, documenté par le notaire. Les scores du chasseur (délai, visites) reflètent la
+réalité de ce parcours, pas un parcours inventé.
+
+Si un acte est créé à tort, la rémunération peut être annulée (`date_annulation` +
+`motif_annulation`), mais la base ne refuse pas l'insertion.
 
 ### 2.4 Facturation (point mineur)
 `facture_chasseur` : `UNIQUE(id_remuneration)` (pas de double facturation) +

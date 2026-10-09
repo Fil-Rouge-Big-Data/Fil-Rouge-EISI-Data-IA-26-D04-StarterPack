@@ -66,7 +66,6 @@ activite AS (  -- S18 : dernière activité RÉELLE = max des dates de demande E
 )
 SELECT
     u.id_utilisateur,
-    u.nom, u.prenom,
     CASE
         WHEN ac.id_client IS NOT NULL THEN 'transactionnel'
         WHEN act.id_client IS NOT NULL THEN 'client_relation'

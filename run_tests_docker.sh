@@ -56,7 +56,7 @@ echo "Cohérence de la documentation avec le schéma..."
 
 echo
 echo "Sondes (anti-régression intégrité)..."
-PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" \
+PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" PGPASSWORD="$POSTGRES_PASSWORD" \
   "$PY" livrables/db/run_sondes.py
 
 echo
