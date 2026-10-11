@@ -53,6 +53,7 @@ PSQL_DOCKER_CONTAINER="$CONTAINER" PGUSER="$USER" PGDATABASE="$DB" \
 echo
 echo "Cohérence de la documentation avec le schéma..."
 "$PY" livrables/db/verifier_dictionnaire.py
+"$PY" livrables/documentation/merise/sources/generer_mld.py --verifier
 
 echo
 echo "Sondes (anti-régression intégrité)..."
