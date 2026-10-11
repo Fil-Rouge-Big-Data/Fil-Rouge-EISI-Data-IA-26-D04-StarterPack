@@ -1,0 +1,38 @@
+// GÉNÉRÉ par generer_mcd.py depuis livrables/db/01_ddl.sql : ne pas modifier à la main.
+graph MCD {
+  graph [label="MCD v8.42 — domaine « Vente » : entités et attributs complets\nen gris : entités des autres domaines, détaillées dans leur propre schéma", labelloc=t, fontname="Helvetica-Bold", fontsize=16, pad=0.3, splines=true, rankdir=LR, nodesep=0.35, ranksep=1.0];
+  node [fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica-Bold", fontsize=10, color="#555555"];
+  notaire [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>NOTAIRE</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_notaire</U></TD></TR><TR><TD ALIGN="LEFT">nom</TD></TR><TR><TD ALIGN="LEFT">etude</TD></TR><TR><TD ALIGN="LEFT">email</TD></TR><TR><TD ALIGN="LEFT">telephone</TD></TR></TABLE>>];
+  offre_acquisition [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>OFFRE_ACQUISITION</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_offre</U></TD></TR><TR><TD ALIGN="LEFT">camp</TD></TR><TR><TD ALIGN="LEFT">saisi_par</TD></TR><TR><TD ALIGN="LEFT">montant</TD></TR><TR><TD ALIGN="LEFT">date_signature</TD></TR><TR><TD ALIGN="LEFT">date_transmission</TD></TR><TR><TD ALIGN="LEFT">date_validite</TD></TR><TR><TD ALIGN="LEFT">statut</TD></TR><TR><TD ALIGN="LEFT">date_reponse</TD></TR></TABLE>>];
+  compromis [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>COMPROMIS</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_compromis</U></TD></TR><TR><TD ALIGN="LEFT">date_signature</TD></TR><TR><TD ALIGN="LEFT">fin_retractation</TD></TR><TR><TD ALIGN="LEFT">depot_garantie</TD></TR><TR><TD ALIGN="LEFT">sequestre</TD></TR><TR><TD ALIGN="LEFT">date_acte_prevue</TD></TR><TR><TD ALIGN="LEFT">date_caducite</TD></TR><TR><TD ALIGN="LEFT">motif_caducite</TD></TR></TABLE>>];
+  clause_suspensive [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>CLAUSE_SUSPENSIVE</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_clause</U></TD></TR><TR><TD ALIGN="LEFT">type_clause</TD></TR><TR><TD ALIGN="LEFT">description</TD></TR><TR><TD ALIGN="LEFT">date_butoir</TD></TR><TR><TD ALIGN="LEFT">statut</TD></TR></TABLE>>];
+  acte [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>ACTE</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_acte</U></TD></TR><TR><TD ALIGN="LEFT">source_information</TD></TR><TR><TD ALIGN="LEFT">date_connaissance</TD></TR><TR><TD ALIGN="LEFT">date_signature</TD></TR><TR><TD ALIGN="LEFT">montant_vente</TD></TR><TR><TD ALIGN="LEFT">honoraires_fixe</TD></TR><TR><TD ALIGN="LEFT">honoraires_taux</TD></TR><TR><TD ALIGN="LEFT">honoraires_encaisses</TD></TR><TR><TD ALIGN="LEFT">date_encaissement</TD></TR></TABLE>>];
+  mandat [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>MANDAT</B></TD></TR></TABLE>>];
+  proposition [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>PROPOSITION</B></TD></TR></TABLE>>];
+  remuneration_chasseur [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>REMUNERATION_CHASSEUR</B></TD></TR></TABLE>>];
+  a30 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="formalise"];
+  a31 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="remplace"];
+  a32 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="concrétise"];
+  a33 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="est instrumenté par"];
+  a34 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="conditionne"];
+  a35 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="réalise"];
+  a36 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#e8710a", label="achat hors dispositif sous"];
+  a39 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="est générée par"];
+  offre_acquisition -- a30 [taillabel="1,1"];
+  a30 -- proposition [headlabel="0,n"];
+  offre_acquisition -- a31 [taillabel="0,1"];
+  a31 -- offre_acquisition [headlabel="0,n"];
+  compromis -- a32 [taillabel="1,1"];
+  a32 -- offre_acquisition [headlabel="0,1"];
+  compromis -- a33 [taillabel="1,1"];
+  a33 -- notaire [headlabel="0,n"];
+  clause_suspensive -- a34 [taillabel="1,1"];
+  a34 -- compromis [headlabel="0,n"];
+  acte -- a35 [taillabel="0,1"];
+  a35 -- compromis [headlabel="0,1"];
+  acte -- a36 [taillabel="0,1" color="#e8710a" fontcolor="#e8710a" penwidth=2];
+  a36 -- mandat [headlabel="0,1" color="#e8710a" fontcolor="#e8710a" penwidth=2];
+  remuneration_chasseur -- a39 [taillabel="1,1"];
+  a39 -- acte [headlabel="0,1"];
+}

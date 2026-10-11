@@ -52,6 +52,8 @@ rétribution après concrétisation.
 
 ## 3. MCD conceptuel — les entités et leurs liens
 
+> **MCD complet (notation Merise, cardinalités déduites du DDL) :** [mcd-v842-complet.md](mcd-v842-complet.md) — vue d'ensemble, un schéma détaillé par domaine, tableaux des entités, associations, cardinalités et CIF, justifications des choix débattus. Le diagramme ci-dessous est la vue conceptuelle simplifiée.
+
 ```mermaid
 erDiagram
     UTILISATEUR ||--o| CLIENT : "est un"

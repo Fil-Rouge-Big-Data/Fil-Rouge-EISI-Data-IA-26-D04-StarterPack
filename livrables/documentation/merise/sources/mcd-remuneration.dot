@@ -1,0 +1,43 @@
+// GÉNÉRÉ par generer_mcd.py depuis livrables/db/01_ddl.sql : ne pas modifier à la main.
+graph MCD {
+  graph [label="MCD v8.42 — domaine « Rémunération » : entités et attributs complets\nen gris : entités des autres domaines, détaillées dans leur propre schéma", labelloc=t, fontname="Helvetica-Bold", fontsize=16, pad=0.3, splines=true, rankdir=LR, nodesep=0.35, ranksep=1.0];
+  node [fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica-Bold", fontsize=10, color="#555555"];
+  bareme [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>BAREME</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_bareme</U></TD></TR><TR><TD ALIGN="LEFT">date_debut_vigueur</TD></TR><TR><TD ALIGN="LEFT">date_fin_vigueur</TD></TR><TR><TD ALIGN="LEFT">perimetre</TD></TR></TABLE>>];
+  tranche_bareme [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>TRANCHE_BAREME</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_tranche</U></TD></TR><TR><TD ALIGN="LEFT">montant_min</TD></TR><TR><TD ALIGN="LEFT">montant_max</TD></TR><TR><TD ALIGN="LEFT">taux_base</TD></TR></TABLE>>];
+  remuneration_chasseur [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>REMUNERATION_CHASSEUR</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_remuneration</U></TD></TR><TR><TD ALIGN="LEFT">id_mandat</TD></TR><TR><TD ALIGN="LEFT">honoraires</TD></TR><TR><TD ALIGN="LEFT">score_delai</TD></TR><TR><TD ALIGN="LEFT">score_exclusivite</TD></TR><TR><TD ALIGN="LEFT">score_ventes</TD></TR><TR><TD ALIGN="LEFT">score_mandats</TD></TR><TR><TD ALIGN="LEFT">score_visites</TD></TR><TR><TD ALIGN="LEFT">score_performance</TD></TR><TR><TD ALIGN="LEFT">taux_base</TD></TR><TR><TD ALIGN="LEFT">majoration_anciennete</TD></TR><TR><TD ALIGN="LEFT">modulation_performance</TD></TR><TR><TD ALIGN="LEFT">taux_final</TD></TR><TR><TD ALIGN="LEFT">montant</TD></TR><TR><TD ALIGN="LEFT">date_calcul</TD></TR><TR><TD ALIGN="LEFT">date_annulation</TD></TR><TR><TD ALIGN="LEFT">motif_annulation</TD></TR></TABLE>>];
+  facture_chasseur [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>FACTURE_CHASSEUR</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_facture</U></TD></TR><TR><TD ALIGN="LEFT">numero</TD></TR><TR><TD ALIGN="LEFT">montant</TD></TR><TR><TD ALIGN="LEFT">date_emission</TD></TR><TR><TD ALIGN="LEFT">statut</TD></TR><TR><TD ALIGN="LEFT">date_verification</TD></TR><TR><TD ALIGN="LEFT">motif_rejet</TD></TR><TR><TD ALIGN="LEFT">statut_paiement</TD></TR><TR><TD ALIGN="LEFT">date_programmation</TD></TR><TR><TD ALIGN="LEFT">date_paiement</TD></TR></TABLE>>];
+  parametre_honoraires [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#4a7bd0"><TR><TD BGCOLOR="#dbe6f7"><B>PARAMETRE_HONORAIRES</B></TD></TR><TR><TD ALIGN="LEFT"><U>id_parametre</U></TD></TR><TR><TD ALIGN="LEFT">montant_fixe</TD></TR><TR><TD ALIGN="LEFT">pourcentage</TD></TR><TR><TD ALIGN="LEFT">date_debut_vigueur</TD></TR><TR><TD ALIGN="LEFT">date_fin_vigueur</TD></TR></TABLE>>];
+  acte [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>ACTE</B></TD></TR></TABLE>>];
+  chasseur [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>CHASSEUR</B></TD></TR></TABLE>>];
+  document [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>DOCUMENT</B></TD></TR></TABLE>>];
+  gestionnaire [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>GESTIONNAIRE</B></TD></TR></TABLE>>];
+  mandat [shape=none, margin=0, label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="3" COLOR="#9aa0a6"><TR><TD BGCOLOR="#eeeeee"><B>MANDAT</B></TD></TR></TABLE>>];
+  facture_document [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label=<<B>joint</B>>];
+  a37 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="est propre à"];
+  a38 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="découpe"];
+  a39 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="est générée par"];
+  a40 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="rémunère"];
+  a41 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="applique"];
+  a42 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="au titre du mandat"];
+  a43 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="facture"];
+  a44 [shape=ellipse, style=filled, fillcolor="#fff8e1", color="#c77700", label="est vérifiée par"];
+  facture_chasseur -- facture_document [taillabel="0,n"];
+  document -- facture_document [taillabel="0,n"];
+  bareme -- a37 [taillabel="0,1"];
+  a37 -- chasseur [headlabel="0,n"];
+  tranche_bareme -- a38 [taillabel="1,1"];
+  a38 -- bareme [headlabel="0,n"];
+  remuneration_chasseur -- a39 [taillabel="1,1"];
+  a39 -- acte [headlabel="0,1"];
+  remuneration_chasseur -- a40 [taillabel="1,1"];
+  a40 -- chasseur [headlabel="0,n"];
+  remuneration_chasseur -- a41 [taillabel="1,1"];
+  a41 -- bareme [headlabel="0,n"];
+  remuneration_chasseur -- a42 [taillabel="1,1"];
+  a42 -- mandat [headlabel="0,n"];
+  facture_chasseur -- a43 [taillabel="1,1"];
+  a43 -- remuneration_chasseur [headlabel="0,1"];
+  facture_chasseur -- a44 [taillabel="0,1"];
+  a44 -- gestionnaire [headlabel="0,n"];
+}
