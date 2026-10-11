@@ -96,7 +96,7 @@ erDiagram
     MANDAT ||--o| PARRAINAGE : "concrétise"
 ```
 
-![MCD v8.41](mcd-v841-concept.png)
+![MCD v8.42](mcd-v841-concept.png)
 
 **Lecture des liens structurants.** Un `utilisateur` est spécialisé en `client`,
 `chasseur` ou `gestionnaire` (héritage par clé partagée). Une `demande` porte au
@@ -115,7 +115,9 @@ sous mandat exclusif, dont l'acte se rattache directement au mandat (ADR-053).
 Diagramme généré depuis les **clés étrangères du schéma réel** (une flèche = une clé étrangère, du parent
 vers l'enfant). Le détail colonne par colonne est dans `dictionnaire-colonnes-v841.md` :
 
-![MLD v8.41 relationnel](mld-v841-relationnel.png)
+![MLD v8.42 relationnel](mld-v841-relationnel.png)
+
+*Les deux images sont produites par Graphviz à partir du dossier [sources](sources/). Le MCD est rédigé à la main ; le MLD est généré à partir des clés étrangères du DDL, il ne peut donc pas dériver du schéma. Régénération : `python livrables/documentation/merise/sources/generer_diagrammes.py`.*
 
 Six domaines : **acteurs** (utilisateur et spécialisations, parrainage),
 **demande** (besoin, versions, affectation, zones), **biens** (bien, annonce,
