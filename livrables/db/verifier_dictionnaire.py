@@ -36,7 +36,7 @@ MERISE_DIR = DB_DIR.parent / "documentation" / "merise"
 # identifiants légitimes qui ne sont pas dans le SQL (noms d'environnement, de fichiers de configuration…)
 TOLERES = {
     "chasse_v8", "chasse_source", "chasse_migration", "sources_yml",     # environnement
-    "fait_vente", "fait_performance_chasseur", "fait_activite_demande",  # pistes de l'étoile OLAP : PRÉVUES, pas encore créées
+    "fait_vente", "fait_performance_chasseur", "fait_activite_demande",  # tables de l'étoile OLAP (schéma olap, livrables/olap/), hors 01_ddl.sql
     "network_mode", "cap_add", "cap_drop", "read_only",                  # options Docker Compose citées dans la doc de sécurité
 }
 # noms de contraintes générés automatiquement par PostgreSQL (ex. utilisateur_email_key) : absents du texte du DDL
