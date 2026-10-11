@@ -1,5 +1,7 @@
 # ADR-048 — État du mandat entièrement dérivé (remplace ADR-038)
 
+> ℹ️ **§3 révisé par ADR-051 (v8.4).** La table `mandat_etat` et son cache « calculé » n'existent plus : l'état *repris* vit dans `mandat_reprise` (OLTP), la projection de performance relève de l'OLAP. La doctrine générale (aucun statut de progression stocké) reste inchangée.
+
 > **Statut :** Accepté · **Date :** 2026-10-06 · **Remplace :** ADR-038 · **Fonde :** ADR-030 (si calculable, pas stocké). · **Déclencheur :** revue v8 (M3), analyse de cohérence.
 
 ## 1. Contexte
@@ -59,7 +61,7 @@ de requête.
 ### 3.1 Pourquoi une projection matérialisée, et pourquoi maintenant
 
 Le PO a confirmé un **flux récurrent de migration** : le service rachète
-régulièrement le portefeuille d'autres entreprises (ADR-001). Or les mandats
+régulièrement le portefeuille d'autres entreprises (besoin confirmé par le PO). Or les mandats
 repris arrivent avec un **état connu** (la source nous dit « vendu », « résilié »)
 mais **sans tous les faits sous-jacents** : on sait qu'une vente a eu lieu, mais
 on n'a pas l'acte qui, dans notre modèle, *définit* le succès.

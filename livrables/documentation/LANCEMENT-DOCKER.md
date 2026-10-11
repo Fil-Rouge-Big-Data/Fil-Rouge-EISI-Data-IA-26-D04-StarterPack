@@ -154,6 +154,17 @@ rechargée.
 
 ---
 
+## 6bis. Vérifier la documentation
+
+La documentation des données (dictionnaire, dossier de modélisation, MPD, passation) peut dériver du schéma. Deux commandes, sans base de données :
+
+```bash
+python livrables/db/generer_dictionnaire_colonnes.py   # régénère le référentiel exhaustif des colonnes
+python livrables/db/verifier_dictionnaire.py           # échoue si la documentation ne décrit plus le schéma
+```
+
+`run_tests_docker.sh` lance déjà le second à la fin. Un code `E1`…`E8` indique ce qui dérive : section ou colonne inexistante, table non documentée, compteur faux, vue jamais citée, référentiel périmé, identifiant disparu cité dans le texte, ADR cité sans définition.
+
 ## 7. Dépannage
 
 | Symptôme | Cause | Solution |

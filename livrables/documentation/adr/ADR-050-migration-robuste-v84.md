@@ -1,6 +1,6 @@
 # ADR-050 — Migration robuste & multisource (v8.4)
 
-> **Statut :** Accepté · **Date :** 2026-10-07 · **Complète :** ADR-001 · **Déclencheur :** revue v8.1.
+> **Statut :** Accepté · **Date :** 2026-10-07 · **Complète :** (besoin confirmé par le PO : flux régulier de rachats) · **Déclencheur :** revue v8.1.
 
 ## 1. Contexte
 

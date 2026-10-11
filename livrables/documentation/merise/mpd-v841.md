@@ -1,7 +1,7 @@
 # MPD PostgreSQL — v8.41
 
-**Modèle physique de données** — reflet d'implémentation de `sql/01_ddl.sql` +
-`sql/02_triggers_vues.sql`. PostgreSQL 18 (compatible 16+).
+**Modèle physique de données** — reflet d'implémentation de `livrables/db/01_ddl.sql` +
+`livrables/db/02_triggers_vues.sql`. PostgreSQL 18 (compatible 16+).
 
 > ⚠️ Entreprise et données fictives. Livrable pédagogique (RNCP40573).
 > Document autonome ; les décisions sont tracées par ADR.
@@ -30,6 +30,7 @@
 | `d_montant` | numeric(12,2) | ≥ 0 |
 | `d_taux` | numeric(5,2) | 0–100 |
 | `d_dpe` | char(1) | A–G |
+| `d_preference` | text | exige / souhaite / exclut / indifferent (ADR-052) |
 
 ---
 
@@ -45,7 +46,15 @@
 | Un mandat courant par demande | colonne scalaire `demande.id_mandat_courant` (unicité mécanique, ADR-048) |
 | Succession 6 mois entre mandats | **trigger** `tg_mandat_succession` (inter-lignes) |
 | Chaîne de vente (offre acceptée → compromis → acte) | **triggers** (inter-lignes, ADR-045) |
-| Résiliation / caducité / sans-suite = date + motif | **CHECK symétrique** `(date IS NULL) = (motif IS NULL)` |
+| Fin anticipée du mandat = date + type | **CHECK symétrique** `(date_resiliation IS NULL) = (type_resiliation IS NULL)` (`ck_mandat_resil`) ; type contrôlé dont `vente_externe` (ADR-049) |
+| Caducité (compromis) et sans-suite (demande) = date + motif | **CHECK symétrique** `(date IS NULL) = (motif IS NULL)` |
+| Rémunération gelée complète | colonnes de calcul **NOT NULL**, 5 composantes du score bornées 0–100, `taux_final` borné **[20 ; 60]** par CHECK (ADR-049) |
+| Une seule facture par rémunération ; vérification tracée | `UNIQUE (id_remuneration)` + CHECK de vérification et de rejet (ADR-049) |
+| Note d'avis rattachée à la proposition, une par proposition | `UNIQUE (id_proposition)` + FK (ADR-049) |
+| Commentaire : exactement une cible | `CHECK (num_nonnulls(id_demande, id_proposition, id_bien) = 1)` |
+| Documents ↔ note d'avis / facture | tables de liaison à **vraies clés étrangères** (plus de rattachement polymorphe) |
+| Empreinte de fichier | `CHECK (hash_sha256 ~ '^[0-9a-f]{64}$')` |
+| Préférence de critère à 4 états | domaine `d_preference` (ADR-052) |
 | Habilitation salarié = attestation | `CHECK` (ADR-046) |
 | Reproductibilité temporelle | fonction `date_reference()` (GUC, ADR-047) |
 
@@ -58,10 +67,12 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 
 **Déclencheurs (règles inter-lignes, non exprimables en CHECK) :**
 - `tg_demande_a_un_acquereur` — une demande a au moins un acquéreur (différé).
-- `tg_demande_acquereur` — un seul acquéreur principal par demande.
+- `tg_demande_acquereur` — un seul acquéreur principal par demande (différé).
+- `tg_affectation_sync` — une affectation ouverte synchronise gestionnaire, chasseur et date d'affectation sur la demande.
 - `tg_mandat_succession` — renouvellement ≥ 6 mois après le précédent (ADR-048).
-- `tg_compromis_offre_acceptee` — compromis seulement sur offre acceptée.
-- `tg_acte_compromis_valide` — acte seulement sur compromis non caduc (ADR-048).
+- `tg_compromis_offre_acceptee` — compromis seulement sur une offre acceptée.
+- `tg_acte_compromis_realise` — pas d'acte sur un compromis caduc.
+- `tg_commentaire_prive` — un client ne peut pas poster de commentaire privé (RG-01).
 - `tg_observation_periode` — observation dans une période close.
 
 ---
@@ -80,7 +91,7 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 
 | Vue | Calcule |
 |---|---|
-| `v_mandat` | état du mandat (actif/échu/succès/renouvelé/résilié) ; **« repris fait foi »** via `mandat_etat` |
+| `v_mandat` | état du mandat (actif/échu/succès/renouvelé/résilié) ; **« repris fait foi »** via `mandat_reprise` |
 | `v_mandat_actif` | mandats au statut calculé `actif` |
 | `v_demande` | cycle de la demande (dérivé des faits) |
 | `v_compromis` | état du compromis (signé/réalisé/caduc) |
@@ -89,8 +100,8 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 | `v_conformite_chasseur` | habilitation/RCP expirée, `est_a_regulariser` |
 | `v_charge_gestionnaire` | charge de leads par gestionnaire |
 
-**Projection d'état `mandat_etat`** (ADR-048 §3) : matérialise l'état, `origine`
-distinguant le fait repris (non recalculable, fait foi) du cache régénérable.
+**Table `mandat_reprise`** (ADR-051, ex-`mandat_etat`) : état *repris* à la migration, donnée transactionnelle
+non recalculable qui fait foi dans `v_mandat`. Le cache d'état calculé n'existe plus en OLTP : il relève de l'OLAP.
 
 ---
 
@@ -102,6 +113,9 @@ distinguant le fait repris (non recalculable, fait foi) du cache régénérable.
   (`date_anonymisation IS NULL OR actif = false`) ; job de rétention (ADR-043).
 - Octets média : hors base (object storage MinIO/S3), seule l'URI stockée (ADR-042).
 - Données sensibles (art. 9 RGPD) : **absentes** du schéma (minimisation).
+- **Accès restreint (RLS)** : non implémenté. Les montants de rémunération, les IBAN et les commentaires privés
+  ne sont pas encore protégés en lecture ; renvoyé au fil API REST, car cela dépend du mode d'authentification
+  du backend (ADR-027). À noter : un superutilisateur contourne la RLS, il faudra un rôle applicatif dédié.
 
 ---
 
@@ -109,18 +123,20 @@ distinguant le fait repris (non recalculable, fait foi) du cache régénérable.
 
 | Job | Rôle | Référence |
 |---|---|---|
-| Anonymisation RGPD | anonymise les données arrivées à échéance (routage par catégorie) | ADR-043, `jobs/anonymisation/` |
-| Rafraîchissement `mandat_etat` (cache) | met à jour les lignes `origine='calcule'` de la frange volatile | ADR-048 §3 (différé) |
-| Migration récurrente | reprise des portefeuilles rachetés (pipeline E-T-L-V) | ADR-001, `migration/` |
+| Anonymisation RGPD | anonymise les données arrivées à échéance (routage par catégorie) | ADR-043, `livrables/jobs/anonymisation/` |
+| Projection de performance des mandats | hors OLTP : relève de l'OLAP (fil Airflow) | ADR-051 |
+| Migration récurrente | reprise des portefeuilles rachetés (pipeline E-T-L-V) | ADR-050, `livrables/migration/` |
 
 ---
 
 ## 9. Validation par exécution (v8.41)
 
-Tout vérifié sur cluster PostgreSQL réel (code testé sur PG16 via le repli
-`uuidv7()`, cible PG18) :
-- DDL rejouable, 37 tables, 8 vues.
-- Harnais de contraintes **probant** : 23 rejets (chacun par sa contrainte) + 5 valides.
-- Batterie de **sondes** : 5 fermées, 0 ouverte.
-- Migration : 153 lignes, 55 anomalies tracées ; 43 tests ; dérivation des états
-  prouvée (le même mandat change d'état selon la date de référence).
+Vérifié sur PostgreSQL 16.15 (code visant PostgreSQL 18 : le `uuidv7()` natif n'a pas été essayé, le repli
+l'a été) :
+- DDL rejouable : **38 tables, 8 vues, 337 colonnes**.
+- Harnais de contraintes : **23 rejets, chacun par la contrainte attendue**, + 4 écritures valides.
+- Batterie de **sondes** : 12 fermées, 0 ouverte (hermétiques : mêmes résultats quel que soit l'état de la base).
+- Migration : 153 lignes, 73 anomalies tracées ; 48 tests ; dérivation des états prouvée (le même mandat
+  change d'état selon la date de référence).
+- Anonymisation RGPD : 7 tests.
+- Documentation : `python livrables/db/verifier_dictionnaire.py` contrôle le dictionnaire contre le DDL.

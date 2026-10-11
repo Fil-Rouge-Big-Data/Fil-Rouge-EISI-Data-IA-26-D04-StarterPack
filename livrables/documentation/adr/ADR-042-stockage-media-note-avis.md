@@ -1,5 +1,7 @@
 # ADR-042 — Stockage des fichiers média & note d'avis
 
+> ℹ️ **Partiellement révisé par ADR-049 (v8.4).** Le rattachement polymorphe `document_rattachement` est remplacé par deux tables de liaison à vraies clés étrangères (`note_avis_document`, `facture_document`), et la note d'avis est désormais rattachée à la **proposition** (et non plus au mandat). Le principe du stockage hors base (octets sur MinIO/S3, métadonnées en base) reste valable.
+
 > **Statut :** Accepté · **Date :** 2026-10-05 · **Renvoi grille :** B4 · **Sources :** US 06 (note d'avis audio/vidéo), ADR-031 (facture → document).
 
 ## 1. Contexte

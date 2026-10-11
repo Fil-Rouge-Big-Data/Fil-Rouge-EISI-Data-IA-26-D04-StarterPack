@@ -10,7 +10,7 @@
 | `livrables/db/` | Base OLTP v8.41 : DDL, triggers/vues, seed, harnais de tests, sondes |
 | `livrables/migration/` | Pipeline de migration E-T-L-V (idempotent, récurrent) + tests |
 | `livrables/jobs/` | Job d'anonymisation RGPD + DAG Airflow |
-| `livrables/documentation/adr/` | 24 ADR (décisions d'architecture tracées) |
+| `livrables/documentation/adr/` | 32 ADR (décisions d'architecture tracées) |
 | `livrables/documentation/merise/` | MCD, MLD, **MPD**, dictionnaire de données (v8.41) |
 | `livrables/documentation/migration/` | Mapping source→cible, arbitrages, recadrage, rapport |
 | `livrables/documentation/PASSATION-v8.41.md` | Point de passation pour les fils aval (Airflow, API, MinIO, OLAP) |
@@ -60,10 +60,11 @@ Sans Docker : exporter `SRC_*` / `DST_*`, créer les deux bases, charger
 
 | Batterie | Commande | Résultat |
 |---|---|---|
-| Contraintes DDL (harnais probant) | `python livrables/db/run_tests.py` | 23 rejets + 5 valides |
-| Sondes (anti-régression intégrité) | `python livrables/db/run_sondes.py` | 5 fermées / 0 ouverte |
-| Migration | `pytest livrables/migration/tests/` | 43 tests |
-| Anonymisation RGPD | `pytest livrables/jobs/anonymisation/` | 6 tests |
+| Contraintes DDL (harnais probant) | `python livrables/db/run_tests.py` | 23 rejets, chacun par la contrainte attendue, + 4 valides |
+| Sondes (anti-régression intégrité) | `python livrables/db/run_sondes.py` | 12 fermées / 0 ouverte |
+| Migration | `pytest livrables/migration/tests/` | 48 tests |
+| Anonymisation RGPD | `pytest livrables/jobs/anonymisation/` | 7 tests |
+| Documentation contre schéma | `python livrables/db/verifier_dictionnaire.py` | cohérente (38 tables, 8 vues, 337 colonnes) |
 
 
 ## Version PostgreSQL
@@ -75,7 +76,7 @@ Le `docker-compose.yml` lance **PostgreSQL 16.15** (testé). Le schéma cible **
 - Clés **UUIDv7** (PG18, fallback PG16) — ADR-044.
 - **États entièrement dérivés** (mandat/demande/compromis) : pas de statut stocké,
   calcul en vues ; seuls faits et flags persistés — ADR-048.
-- Table `mandat_etat` (« repris fait foi ») pour les états repris non recalculables.
+- Table `mandat_reprise` (« repris fait foi ») pour les états repris non recalculables (ADR-051).
 - Intégrité renforcée (FK composées, exclusions barème, chaîne de vente) — ADR-045.
 - Habilitation loi Hoguet (carte T ou attestation) — ADR-046.
 - Parrainage conforme au règlement — ADR-034.

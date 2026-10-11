@@ -1,13 +1,15 @@
 # Dossier de modélisation — v8.41 (autonome)
 
 **Projet :** Service de chasse immobilière — refonte du SI
-**Cible :** MPD v8.41 — `sql/01_ddl.sql` + `sql/02_triggers_vues.sql`, PostgreSQL 18 (compatible 16+)
+**Cible :** MPD v8.41 — `livrables/db/01_ddl.sql` + `livrables/db/02_triggers_vues.sql`, PostgreSQL 18 (compatible 16+)
 **Date de référence projet :** 25 juillet 2026
 
 > ⚠️ Entreprise, données et personnages fictifs. Livrable pédagogique (RNCP40573).
 
-> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (36 tables),
-> sans renvoi à une version antérieure. Les décisions sont tracées par ADR.
+> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (38 tables, 8 vues),
+> sans renvoi à une version antérieure. Les décisions sont tracées par ADR. Le **sens métier** de chaque
+> colonne est dans `dictionnaire-donnees-v841.md` ; l'**exhaustivité** (type, nullité, clés, règles) dans
+> `dictionnaire-colonnes-v841.md`, généré depuis le DDL et vérifié automatiquement.
 
 ---
 
@@ -37,11 +39,13 @@ rétribution après concrétisation.
 | Principe | Application | ADR |
 |---|---|---|
 | Clés **UUIDv7** (ordonnées) | pas de fragmentation d'index à grande échelle | ADR-044 |
-| **Le contractuel se rattache au mandat** | note d'avis, rémunération, proposition pointent le mandat | ADR-045 |
+| **Le contractuel se rattache au mandat** | la proposition et la rémunération pointent le mandat (clés composées) ; la note d'avis pointe la proposition, donc indirectement le mandat | ADR-045, ADR-049 |
 | L'**expression du besoin** reste sur la demande | critères, acquéreurs, affectation | — |
-| **Si calculable, pas stocké** | expiration mandat, conformité → vues | ADR-030 |
+| **Si calculable, pas stocké** | aucun statut de progression : l'état du mandat, de la demande et du compromis est dérivé en vues ; seuls les faits et les écarts datés (résiliation, caducité, sans-suite) sont stockés | ADR-030, ADR-048 |
 | **Reproductibilité temporelle** | `date_reference()` au lieu de `current_date` | ADR-047 |
-| **Pas de DELETE physique** | cycle de vie par statuts + anonymisation | ADR-043 |
+| **Pas de DELETE physique** | cycle de vie par faits datés + anonymisation (jamais de suppression) | ADR-043, ADR-048 |
+| **Le droit à rémunération se dérive de l'acte** | un acte est toujours une vente menée par le chasseur ; une vente externe ne crée pas d'acte (elle clôt le mandat) | ADR-049 |
+| **Intention du client à 4 états** | critère `exige` / `souhaite` / `exclut` / `indifferent` (« sans balcon » = refus) | ADR-052 |
 | Intégrité **déclarative** d'abord | FK composées, exclusions ; triggers si inter-lignes | ADR-045 |
 
 ---
@@ -62,21 +66,31 @@ erDiagram
     DEMANDE ||--o{ MANDAT : "donne lieu à"
     CHASSEUR ||--o{ MANDAT : "signe"
     MANDAT ||--o| MANDAT : "renouvelle (précédent)"
+    MANDAT ||--o| MANDAT_REPRISE : "état repris (migration)"
     MANDAT ||--o{ PROPOSITION : "cadre"
     DEMANDE ||--o{ PROPOSITION : "reçoit"
     BIEN ||--o{ PROPOSITION : "est proposé"
     BIEN ||--o{ ANNONCE : "a des annonces"
-    MANDAT ||--o{ NOTE_AVIS : "cadre"
-    BIEN ||--o{ NOTE_AVIS : "porte sur"
+    PROPOSITION ||--o| NOTE_AVIS : "fait l'objet de"
+    PROPOSITION ||--o{ VISITE : "donne lieu à"
+    DEMANDE ||--o{ COMMENTAIRE : "est commentée"
+    PROPOSITION ||--o{ COMMENTAIRE : "est commentée"
+    BIEN ||--o{ COMMENTAIRE : "est annoté"
+    NOTE_AVIS ||--o{ NOTE_AVIS_DOCUMENT : "joint"
+    DOCUMENT ||--o{ NOTE_AVIS_DOCUMENT : "est joint à"
+    FACTURE_CHASSEUR ||--o{ FACTURE_DOCUMENT : "joint"
+    DOCUMENT ||--o{ FACTURE_DOCUMENT : "est joint à"
     PROPOSITION ||--o{ OFFRE_ACQUISITION : "mène à"
     OFFRE_ACQUISITION ||--o| COMPROMIS : "aboutit à"
     NOTAIRE ||--o{ COMPROMIS : "instrumente"
+    COMPROMIS ||--o{ CLAUSE_SUSPENSIVE : "est assorti de"
     COMPROMIS ||--o| ACTE : "se réalise en"
     ACTE ||--o| REMUNERATION_CHASSEUR : "génère"
     MANDAT ||--o{ REMUNERATION_CHASSEUR : "rémunère sur"
     BAREME ||--|{ TRANCHE_BAREME : "découpé en"
     CHASSEUR ||--o{ BAREME : "a (ou défaut)"
-    REMUNERATION_CHASSEUR ||--o{ FACTURE_CHASSEUR : "facturée"
+    BAREME ||--o{ REMUNERATION_CHASSEUR : "est appliqué à"
+    REMUNERATION_CHASSEUR ||--o| FACTURE_CHASSEUR : "facturée"
     UTILISATEUR ||--o{ PARRAINAGE : "parraine"
     MANDAT ||--o| PARRAINAGE : "concrétise"
 ```
@@ -86,16 +100,18 @@ erDiagram
 **Lecture des liens structurants.** Un `utilisateur` est spécialisé en `client`,
 `chasseur` ou `gestionnaire` (héritage par clé partagée). Une `demande` porte au
 moins un acquéreur et au moins une version de critères. Elle peut donner lieu à
-plusieurs `mandat` (renouvellements successifs, chaînés par `précédent`). Tout le
-contractuel (proposition, note d'avis, rémunération) se rattache au `mandat`. La
+plusieurs `mandat` (renouvellements successifs, chaînés par `précédent`). Le
+contractuel se rattache au `mandat` : la proposition et la rémunération le référencent directement
+(clés étrangères composées), la note d'avis passe par la proposition. La
 chaîne de vente est linéaire et verrouillée : `offre → compromis → acte`, chaque
 étape conditionnée à la précédente (ADR-045).
 
 ---
 
-## 4. MLD relationnel complet (36 tables)
+## 4. MLD relationnel complet (38 tables)
 
-Diagramme généré depuis le schéma réel, groupé par domaine, avec cardinalités :
+Diagramme généré depuis les **clés étrangères du schéma réel** (une flèche = une clé étrangère, du parent
+vers l'enfant). Le détail colonne par colonne est dans `dictionnaire-colonnes-v841.md` :
 
 ![MLD v8.41 relationnel](mld-v841-relationnel.png)
 
@@ -103,8 +119,9 @@ Six domaines : **acteurs** (utilisateur et spécialisations, parrainage),
 **demande** (besoin, versions, affectation, zones), **biens** (bien, annonce,
 proposition, note d'avis, documents), **vente** (offre, compromis, acte),
 **rémunération** (barème, tranches, rémunération, facture), **pilotage**
-(mandat, indicateurs, périodes, observations). Les 8 tables à bordure épaisse
-sont les nouveautés de la chaîne rémunération et médias.
+(mandat, indicateurs, périodes, observations). Les tables à bordure orange
+sont celles ajoutées ou renommées depuis la v8.3 : `mandat_reprise` (ex-`mandat_etat`, ADR-051),
+`note_avis_document` et `facture_document` (remplacent le rattachement polymorphe, ADR-049).
 
 ---
 
@@ -119,32 +136,38 @@ garanties, barème par défaut), `gestionnaire` (matricule, capacité de leads).
 dispositif complet (parrain, filleul, cycle, rétribution).
 
 ### 5.2 Demande (expression du besoin)
-`demande` est la racine du besoin (canal, consentement RGPD, statut de cycle).
+`demande` est la racine du besoin (canal, consentement RGPD). **Aucun statut stocké** : le cycle est dérivé
+(`v_demande`) ; seuls les faits et le flag « sans suite » sont persistés (ADR-048).
 `demande_acquereur` lie un ou plusieurs clients (un principal obligatoire).
-`demande_version` historise les critères (booléens d'exigence, budget, surface).
+`demande_version` historise les critères (budget, surface, et des préférences à **4 états** `pref_*` :
+exige / souhaite / exclut / indifferent, ADR-052).
 `affectation` relie gestionnaire, demande et chasseur dans le temps.
 `zone`/`version_zone`/`chasseur_zone` gèrent la géographie.
 
 ### 5.3 Biens et prospection
 `bien` et ses `annonce` (sources hétérogènes). `proposition` relie un bien à une
-demande **sous un mandat** (ADR-045). `commentaire` (échanges), `visite`,
-`note_avis` (conclusions du chasseur, rattachées au mandat), `document` +
-`document_rattachement` (médias hors base, ADR-042).
+demande **sous un mandat** (ADR-045). `commentaire` (une cible parmi
+demande, proposition ou bien), `visite`, `note_avis` (conclusions du chasseur, **rattachées à la
+proposition**), `document` (métadonnées ; octets hors base, ADR-042) relié aux notes et factures par
+`note_avis_document` et `facture_document` (vraies clés étrangères).
 
 ### 5.4 Vente
 Chaîne linéaire verrouillée : `offre_acquisition` (acceptée) → `compromis`
 (réalisé, chez un `notaire`, avec `clause_suspensive`) → `acte` (encaissement
-des honoraires tracé). Triggers d'intégrité (ADR-045).
+des honoraires tracé). Triggers d'intégrité (ADR-045). **Une vente externe** (mandat non exclusif, achat
+ailleurs) ne crée pas d'acte : elle clôt le mandat (`type_resiliation = 'vente_externe'`, ADR-049).
 
 ### 5.5 Rémunération
 `bareme` (défaut ou par chasseur, versionné, sans chevauchement) découpé en
 `tranche_bareme` (intervalles semi-ouverts). `parametre_honoraires` (optionnel).
-`remuneration_chasseur` (part **gelée** au jour de l'acte, rattachée au mandat
-ET au chasseur par FK composée). `facture_chasseur` (cycle soumise → vérifiée →
-payée).
+`remuneration_chasseur` (part **gelée** au jour de l'acte : toutes les valeurs obligatoires, les cinq
+composantes du score conservées, taux final borné à 20–60 % par CHECK ; rattachée au mandat ET au
+chasseur par FK composée). `facture_chasseur` (une seule facture par rémunération ; cycle soumise →
+vérifiée → payée, vérification tracée).
 
 ### 5.6 Pilotage
-`mandat` (le pivot contractuel). `indicateur`/`periode`/`observation`/`objectif`
+`mandat` (le pivot contractuel) et `mandat_reprise` (état repris à la migration, donnée non recalculable,
+ADR-051). `indicateur`/`periode`/`observation`/`objectif`
 pour le suivi de performance (alimente l'OLAP, ADR-036).
 
 ---
@@ -153,10 +176,12 @@ pour le suivi de performance (alimente l'OLAP, ADR-036).
 
 | Vue | Rôle |
 |---|---|
-| `v_mandat` | date de fin et expiration calculées (6 mois, `date_reference()`) |
-| `v_mandat_actif` | mandats non expirés |
+| `v_mandat` | état du mandat dérivé des faits : `statut_calcule` ∈ actif / echu / clos_succes / renouvele / resilie ; un état repris (`mandat_reprise`) fait foi |
+| `v_mandat_actif` | mandats dont l'état calculé est `actif` |
+| `v_demande` | cycle de la demande : en_recherche / qualifie / affecte / close / sans_suite |
+| `v_compromis` | état du compromis : signe / realise / caduc |
+| `v_version_courante` | version de critères en vigueur par demande (`no_version` maximal) |
 | `v_honoraires` | assiette d'honoraires par acte (arrondie) |
-| `v_version_courante` | version de critères en vigueur par demande |
 | `v_conformite_chasseur` | habilitation/RCP expirée, `est_a_regulariser` (D-FLAG) |
 | `v_charge_gestionnaire` | charge de leads par gestionnaire |
 
@@ -165,7 +190,7 @@ pour le suivi de performance (alimente l'OLAP, ADR-036).
 ## 7. Dictionnaire des données
 
 Le détail colonne par colonne (sens, domaine, justification, contraintes) figure
-dans `dictionnaire-donnees-v82.md`.
+dans `dictionnaire-donnees-v841.md` (sens métier) et `dictionnaire-colonnes-v841.md` (référentiel exhaustif généré).
 
 ---
 

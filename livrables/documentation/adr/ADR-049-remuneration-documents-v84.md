@@ -37,6 +37,42 @@ existe ⟺ le droit est ouvert**. Rien à vérifier, rien à stocker.
 > *est* la preuve du droit. On retire deux colonnes (`origine_decouverte`,
 > `droit_ouvert` envisagé) et une contrainte conditionnelle.
 
+**Clarification (relecture v8.41) — vente hors dispositif sous mandat exclusif.**
+
+Le `.feature 00` (l. 15-19) et le `.feature 10` (l. 40) établissent que sous mandat **exclusif**, le
+client qui achète en dehors du dispositif du chasseur ouvre **quand même** le droit à rémunération.
+Le `.feature 00` (l. 42-48) précise que le notaire, informé du mandat, collecte les honoraires : une
+vente externe produit donc bien un **acte authentique**.
+
+**Erreur corrigée.** La version précédente de cette section affirmait qu'une vente externe ne crée
+jamais d'acte. C'est faux pour le mandat exclusif. Le tableau correct est :
+
+| Exclusivité | Origine de la vente | Droit à rémunération | Acte créé ? |
+| --- | --- | --- | --- |
+| exclusif | le chasseur | ouvert | oui (chaîne proposition → compromis → acte) |
+| exclusif | le client, en dehors du dispositif | **ouvert** | **oui** (acte sans compromis amont, rattaché au mandat) |
+| exclusif | le client achète via une autre agence | **ouvert** | **oui** (même logique : le notaire est informé du mandat) |
+| non-exclusif | le chasseur | ouvert | oui (chaîne complète) |
+| non-exclusif | le client, en dehors du dispositif | **fermé** | non → résiliation `vente_externe` |
+| non-exclusif | un chasseur d'une autre agence | **fermé** | non → résiliation `vente_externe` |
+
+**Impact sur le schéma (v8.42, pas dans cette PR) :**
+- `acte.id_compromis` devient **nullable** ; ajout de `acte.id_mandat` (FK → `mandat`) ;
+- exactement un des deux renseigné : `CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL))` ;
+- **trigger** : un acte sans compromis n'est accepté que sur un mandat **exclusif en cours de
+  validité** à la date de l'acte (garde d'exclusivité, test T-DR-01, CDC PO-11) ;
+- `v_mandat` (`a_acte`, `clos_succes`) et `v_demande` (`close`) reconnaissent les deux chemins ;
+- convention des scores gelés pour une vente externe : `score_visites` = 0 (aucune visite du
+  chasseur), les autres composantes reflètent l'historique du chasseur sur ce mandat ;
+- MCD, MLD, MPD, dictionnaire, `verifier_dictionnaire.py` à mettre à jour (acte–compromis passe
+  de 1,1 à 0,1 ; nouvelle association acte–mandat).
+
+**Dans cette PR (v8.41) :** documentation seule. Le commentaire DDL sur `vente_externe` est corrigé
+pour ne plus réserver ce type au non-exclusif. Le schéma changera en v8.42.
+
+Si un acte est créé à tort, la rémunération peut être annulée (`date_annulation` +
+`motif_annulation`), mais la base ne refuse pas l'insertion.
+
 ### 2.4 Facturation (point mineur)
 `facture_chasseur` : `UNIQUE(id_remuneration)` (pas de double facturation) +
 cycle de vérification tracé (`date_verification`, `id_verificateur`, `motif_rejet`).
@@ -58,3 +94,30 @@ cycle de vérification tracé (`date_verification`, `id_verificateur`, `motif_re
 
 ## 4. Rattachement RNCP40573
 BC01 (décisions tracées), BC03 (intégrité SGBD, gel juridique), BC05 (données fiables pour l'aval).
+
+## 5. Convention de comptage des visites (relecture v8.41)
+
+**Contexte.** La table `visite` porte un `id_visiteur → utilisateur` sans unicité par proposition ou
+par date : deux personnes (le chasseur et le client, un couple d'acquéreurs) peuvent visiter le même
+bien le même jour et produire chacune une ligne.
+
+**Convention retenue.** Une visite est un **fait par participant**. Le score de visites du chasseur
+(`score_visites`, pondération 25) se calcule en comptant les **visites réalisées par le client** sur
+les propositions du mandat concerné, sur les 12 mois glissants précédant l'acte :
+
+```sql
+SELECT count(*)
+FROM visite v
+JOIN proposition p ON p.id_proposition = v.id_proposition
+WHERE p.id_mandat = :id_mandat
+  AND v.realisee = true
+  AND EXISTS (SELECT 1 FROM client c WHERE c.id_utilisateur = v.id_visiteur)
+  AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
+```
+
+Ce comptage est une **règle OLAP** (ou du moteur de calcul de la rémunération), pas une contrainte
+d'intégrité. La base ne porte pas de `UNIQUE` sur `(id_proposition, date_visite)` : cela interdirait
+les visites à deux (couple acquéreur, chasseur + client), qui sont le cas majoritaire.
+
+**Alternative écartée.** Ajouter une unicité `(id_proposition, date_visite, id_visiteur)` empêcherait
+un même visiteur de revenir le même jour (contre-visite de contrôle), sans bénéfice pour l'intégrité.

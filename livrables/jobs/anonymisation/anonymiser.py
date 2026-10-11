@@ -66,7 +66,6 @@ activite AS (  -- S18 : dernière activité RÉELLE = max des dates de demande E
 )
 SELECT
     u.id_utilisateur,
-    u.nom, u.prenom, u.email,
     CASE
         WHEN ac.id_client IS NOT NULL THEN 'transactionnel'
         WHEN act.id_client IS NOT NULL THEN 'client_relation'
@@ -164,7 +163,7 @@ def main(argv=None):
         print(f"  candidats à anonymiser : {len(a_anon)}")
         print(f"  conservés              : {len(conserves)}")
         for r, cat, age in a_anon:
-            print(f"    - {r['prenom']} {r['nom']} [{cat}] inactif {age:.1f} ans")
+            print(f"    - [{cat}] inactif {age:.1f} ans (id={r['id_utilisateur']})")
 
         if args.dry_run:
             print("  (DRY-RUN : aucune écriture)")
