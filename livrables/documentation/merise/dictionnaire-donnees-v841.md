@@ -1,7 +1,7 @@
 # Dictionnaire des données — v8.41
 
 **Cible :** MPD v8.41 — `livrables/db/01_ddl.sql`. PostgreSQL 18 (compatible 16+).
-**Portée :** 38 tables et 8 vues. Ce document est **rédigé à la main** : il porte le **sens métier** et les
+**Portée :** 38 tables et 9 vues. Ce document est **rédigé à la main** : il porte le **sens métier** et les
 **justifications**. L'**exhaustivité** (chaque colonne : type, nullité, clés, défauts, règles) est dans le
 référentiel généré [`dictionnaire-colonnes-v841.md`](dictionnaire-colonnes-v841.md), produit depuis le DDL.
 Un contrôle automatique (`python livrables/db/verifier_dictionnaire.py`) garantit que les deux restent
@@ -349,6 +349,8 @@ Une seule offre acceptée par proposition (`ux_offre_acceptee`).
   mandat **exclusif en vigueur** à la date de l'acte (trigger `tg_acte_hors_dispositif`) ; au plus un par mandat.
   L'acte hors dispositif trace `source_information` (client / notaire / autre) et `date_connaissance`
   (date à laquelle l'agence a appris la vente), obligatoires pour lui seul (`ck_acte_trace_hors_dispositif`).
+  Le mandat référencé est celui de la **chaîne de renouvellement en vigueur** à la date de l'acte (D13 :
+  un renouvellement en cours prime sur le mandat initial échu).
 
 ## notaire
 Annuaire des notaires ; unique par couple nom + étude (`uk_notaire`).
@@ -387,7 +389,10 @@ paramètres entreprise versionnés (optionnel).
 Part du chasseur, **figée au jour de l'acte** : toutes les valeurs de calcul sont obligatoires (insertion
 complète, pas de calcul par étapes), pour que le calcul reste reconstituable juridiquement (ADR-049).
 Une rémunération existe pour **chaque acte** : vente menée par le chasseur ou achat hors dispositif sous
-mandat exclusif (ADR-053). Elle porte sur **le mandat de l'acte** (trigger `tg_remuneration_mandat_acte`).
+mandat exclusif (ADR-053). Elle porte sur le mandat de la **chaîne de renouvellement en vigueur** à la date de l'acte (trigger
+`tg_remuneration_mandat_acte` : S25) ; si aucun mandat de la chaîne n'est en vigueur, le droit est fermé et
+l'insertion refusée (S26, D13, `.feature 10` l. 45-50). Une modification ultérieure du mandat ou de l'acte est
+re-vérifiée au commit (`tg_mandat_reverification`, `tg_acte_reverification`).
 
 | Colonne | Type | Clé/NN | Sens |
 |---|---|---|---|
@@ -488,6 +493,7 @@ d'un indicateur sur une période. `objectif` : cible d'un indicateur.
 | `v_compromis` | `statut_calcule` ∈ signe / realise / caduc (caduc = flag stocké `date_caducite` + motif ; réalisé = il existe un acte). |
 | `v_version_courante` | La version de critères en vigueur par demande (celle au `no_version` maximal). |
 | `v_honoraires` | `honoraires_total` : assiette d'honoraires par acte (arrondie). |
+| `v_acte_mandat` | Pour chaque acte : `hors_dispositif`, `id_mandat_origine` (chaîne de vente ou mandat direct), `id_mandat_en_vigueur` (mandat de la chaîne de renouvellement en vigueur à la date de l'acte, celui que rémunère `remuneration_chasseur`) et `id_mandat_initial` (point de départ du délai S₁). Fonctions `f_chaine_mandats`, `f_mandat_en_vigueur_chaine`, `f_mandat_initial_chaine` (ADR-053, D13). |
 | `v_conformite_chasseur` | `habilitation_expiree`, `rcp_expiree`, `mandat_hors_habilitation`, `est_a_regulariser`. |
 | `v_charge_gestionnaire` | `leads_en_cours` et `taux_charge` (leads en cours / capacité maximale). |
 
@@ -500,7 +506,9 @@ d'un indicateur sur une période. `objectif` : cible d'un indicateur.
 | `acte` | `id_compromis` devient facultatif ; ajout de `id_mandat` (FK `mandat`, unique) ; `ck_acte_origine` : exactement une origine ; trigger `tg_acte_hors_dispositif` : mandat exclusif en vigueur à la date de l'acte ; `source_information` et `date_connaissance` (`ck_acte_trace_hors_dispositif`). (ADR-053) |
 | `mandat` | `ck_mandat_vente_externe` : `vente_externe` réservé au mandat non exclusif. (ADR-053) |
 | `remuneration_chasseur` | Trigger `tg_remuneration_mandat_acte` : la rémunération porte sur le mandat de l'acte. (ADR-053) |
-| `v_mandat`, `v_demande` | L'acte hors dispositif clôt le mandat en succès et la demande. (ADR-053) |
+| `v_acte_mandat` | Nouvelle vue : mandat d'origine, mandat en vigueur et mandat initial de chaque acte (chaîne de renouvellement, D13). |
+| `v_mandat`, `v_demande` | L'acte (chaîne de vente ou hors dispositif) clôt en succès le mandat de la chaîne **en vigueur** à sa date ; le mandat initial d'une chaîne renouvelée est « renouvelé » ; la demande est close dès qu'un de ses mandats est rémunéré. (ADR-053, D13) |
+| `remuneration_chasseur` | Trigger `tg_remuneration_mandat_acte` : S25 (mandat en vigueur de la chaîne) et S26 (droit fermé si aucun mandat en vigueur à la date de l'acte). Re-vérification différée au commit après modification du mandat ou de l'acte. (ADR-053, D13) |
 
 # Évolutions v8.4 (par rapport à v8.3)
 

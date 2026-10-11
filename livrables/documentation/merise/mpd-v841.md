@@ -48,7 +48,8 @@
 | Chaîne de vente (offre acceptée → compromis → acte) | **triggers** (inter-lignes, ADR-045) |
 | Acte : exactement une origine (compromis, ou mandat pour un achat hors dispositif) | **CHECK** `(id_compromis IS NULL) <> (id_mandat IS NULL)` (`ck_acte_origine`, ADR-053) |
 | Achat hors dispositif : mandat exclusif en vigueur à la date de l'acte | **trigger** `tg_acte_hors_dispositif` (ADR-053) |
-| Rémunération sur le mandat de l'acte | **trigger** `tg_remuneration_mandat_acte` (ADR-053) |
+| Rémunération sur le mandat de la chaîne de renouvellement en vigueur à la date de l'acte ; droit fermé si aucun | **trigger** `tg_remuneration_mandat_acte` (S25 / S26, ADR-053, D13) |
+| Cohérence maintenue après modification d'un mandat ou d'un acte | **déclencheurs de contrainte différés** `tg_mandat_reverification`, `tg_acte_reverification` (ADR-053) |
 | `vente_externe` réservé au mandat non exclusif | **CHECK** `ck_mandat_vente_externe` (ADR-053) |
 | Acte hors dispositif : source et date de connaissance tracées | **CHECK** `ck_acte_trace_hors_dispositif` (ADR-053) |
 | Fin anticipée du mandat = date + type | **CHECK symétrique** `(date_resiliation IS NULL) = (type_resiliation IS NULL)` (`ck_mandat_resil`) ; type contrôlé dont `vente_externe` (ADR-049) |
@@ -77,8 +78,11 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 - `tg_mandat_succession` — renouvellement ≥ 6 mois après le précédent (ADR-048).
 - `tg_compromis_offre_acceptee` — compromis seulement sur une offre acceptée.
 - `tg_acte_compromis_realise` — pas d'acte sur un compromis caduc.
-- `tg_acte_hors_dispositif` — un acte sans compromis exige un mandat exclusif en vigueur à sa date (ADR-053).
-- `tg_remuneration_mandat_acte` — la rémunération porte sur le mandat de l'acte, quelle que soit son origine (ADR-053).
+- `tg_acte_hors_dispositif` — un acte sans compromis référence le mandat exclusif de sa chaîne de renouvellement en vigueur à sa date (S24, ADR-053, D13).
+- `tg_remuneration_mandat_acte` — la rémunération porte sur le mandat de la chaîne en vigueur à la date de l'acte (S25) ; droit fermé si aucun (S26).
+- `tg_mandat_reverification`, `tg_acte_reverification` — déclencheurs de contrainte **différés au commit** : une modification du mandat (exclusivité, dates, résiliation, filiation) ou de l'acte (mandat, compromis, date) est re-contrôlée par les mêmes fonctions, pour qu'un contournement après coup soit impossible.
+
+**Fonctions de chaîne (D13) :** `f_chaine_mandats` (initial + renouvellements), `f_mandat_en_vigueur_chaine` (mandat en vigueur à une date), `f_mandat_initial_chaine` (point de départ du délai S₁).
 - `tg_commentaire_prive` — un client ne peut pas poster de commentaire privé (RG-01).
 - `tg_observation_periode` — observation dans une période close.
 
@@ -104,6 +108,7 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 | `v_compromis` | état du compromis (signé/réalisé/caduc) |
 | `v_version_courante` | version au `no_version` max par demande |
 | `v_honoraires` | assiette d'honoraires par acte (arrondie) |
+| `v_acte_mandat` | mandat d'origine, mandat en vigueur et mandat initial de chaque acte (chaîne de renouvellement, D13) |
 | `v_conformite_chasseur` | habilitation/RCP expirée, `est_a_regulariser` |
 | `v_charge_gestionnaire` | charge de leads par gestionnaire |
 
@@ -140,9 +145,9 @@ non recalculable qui fait foi dans `v_mandat`. Le cache d'état calculé n'exist
 
 Vérifié sur PostgreSQL 16.15 (code visant PostgreSQL 18 : le `uuidv7()` natif n'a pas été essayé, le repli
 l'a été) :
-- DDL rejouable : **38 tables, 8 vues, 340 colonnes**.
-- Harnais de contraintes : **30 rejets, chacun par la contrainte attendue**, + 5 écritures valides
-  (v8.42 : T24 à T30 et P8, achat hors dispositif — ADR-053).
+- DDL rejouable : **38 tables, 9 vues, 340 colonnes**.
+- Harnais de contraintes : **34 rejets, chacun par la contrainte attendue**, + 6 écritures valides
+  (v8.42 : T24 à T34, P8 et P9 — achat hors dispositif, chaîne de renouvellement, re-vérification après coup ; ADR-053, D13).
 - Batterie de **sondes** : 12 fermées, 0 ouverte (hermétiques : mêmes résultats quel que soit l'état de la base).
 - Migration : 153 lignes, 73 anomalies tracées ; 48 tests ; dérivation des états prouvée (le même mandat
   change d'état selon la date de référence).

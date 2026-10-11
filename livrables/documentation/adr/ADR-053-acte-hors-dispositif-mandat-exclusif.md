@@ -1,6 +1,6 @@
 # ADR-053 — Achat hors dispositif sous mandat exclusif : acte sans compromis (v8.42)
 
-> **Statut :** Proposé · **Date :** 2026-10-09, révisé le 2026-10-11 · **Complète :** ADR-049 (§2.3, §5) · **Déclencheur :** revue de la PR #13 (point 1, Angeline Gomez et Matthieu Barre ; remarques de l'approbation du 11/10), test de recette T-DR-01 (CDC v3.0, PO-11).
+> **Statut :** Proposé · **Date :** 2026-10-09, révisé le 2026-10-11 (D13, re-vérification après coup) · **Complète :** ADR-049 (§2.3, §5) · **Déclencheur :** revue de la PR #13 (point 1, Angeline Gomez et Matthieu Barre ; remarques de l'approbation du 11/10), test de recette T-DR-01 (CDC v3.0, PO-11).
 
 ## 1. Contexte
 
@@ -51,11 +51,20 @@ Mise en œuvre (v8.42) :
    REFERENCES mandat` (au plus un achat hors dispositif par mandat) ;
    `CONSTRAINT ck_acte_origine CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL))`.
    Un simple `OR` aurait accepté les deux colonnes remplies, avec deux mandats potentiellement différents.
-2. **`tg_acte_hors_dispositif`** (S24) : refuse un acte sans compromis si le mandat n'est pas exclusif,
-   ou si la date de l'acte sort de `[date_debut ; date_debut + 6 mois]`, ou suit sa résiliation.
-3. **`tg_remuneration_mandat_acte`** (S25) : la rémunération porte sur **le mandat de l'acte**, retrouvé
-   par l'une ou l'autre origine. La FK composée `(id_mandat, id_chasseur)` garantissait déjà que le chasseur
-   rémunéré est celui du mandat ; rien ne garantissait jusqu'ici que ce mandat était celui de la vente.
+2. **`tg_acte_hors_dispositif`** (S24) : un acte sans compromis doit référencer le mandat de sa **chaîne de
+   renouvellement en vigueur** à la date de l'acte (commencé, non échu, non résilié avant), et ce mandat doit
+   être **exclusif**. Si un renouvellement est en vigueur, c'est lui qu'il faut référencer, pas le mandat initial.
+3. **`tg_remuneration_mandat_acte`** (S25 / S26) : la rémunération porte sur le mandat de la chaîne **en
+   vigueur à la date de l'acte**, retrouvé par l'une ou l'autre origine (S25) ; si aucun mandat de la chaîne n'est
+   en vigueur, le droit est fermé et l'insertion refusée (S26, `.feature` 10 l. 45-50). La FK composée
+   `(id_mandat, id_chasseur)` garantissait déjà que le chasseur rémunéré est celui du mandat ; rien ne
+   garantissait jusqu'ici que ce mandat était celui de la vente, ni qu'il était en vigueur.
+3 bis. **Re-vérification après coup** : modifier le mandat (exclusivité, dates, résiliation, filiation) ou l'acte
+   (mandat, compromis, date) après l'écriture ne doit pas les rendre incohérents. Deux **déclencheurs de
+   contrainte différés** (`tg_mandat_reverification`, `tg_acte_reverification`) rejouent les mêmes contrôles au
+   commit. Différés, pour qu'une transaction applicative puisse enchaîner les mises à jour (par exemple
+   redater l'acte puis déplacer la rémunération sur le renouvellement) ; `SET CONSTRAINTS ALL IMMEDIATE`
+   les force sans attendre le commit.
 4. **`mandat`** : `CONSTRAINT ck_mandat_vente_externe CHECK (NOT (exclusif AND type_resiliation =
    'vente_externe'))` — sous mandat exclusif, l'achat ailleurs n'est pas une fin anticipée. Sans cette
    contrainte, un mandat payé apparaîtrait « résilié » : dans `v_mandat`, la résiliation est testée
@@ -109,12 +118,12 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
     (membre « inconnu » des dimensions).
 - **Point ouvert** : le notaire de l'acte hors dispositif n'est pas enregistré (il l'est sur le compromis
   pour la chaîne normale). Le justificatif reçu se joint en `document`.
-- **Point ouvert, en attente du Product Owner (D13)** : mandat renouvelé. L'exemple de bout en bout du
-  `.feature` 10 (Bruno) date l'acte après l'échéance du mandat, sans renouvellement, et calcule pourtant
-  une rémunération, alors que la ligne 46 ferme le droit dans ce cas. Lecture proposée : le droit se juge
-  sur la **chaîne de renouvellement** en vigueur à la date de l'acte, et le délai S₁ se mesure depuis le
-  mandat initial. La garde S24 vérifie le mandat référencé par l'acte : à étendre à la chaîne si D13 est
-  confirmée.
+- **D13 — chaîne de renouvellement (mis en œuvre, réponse du PO simulée le 11/10, à confirmer).** L'exemple
+  de bout en bout du `.feature` 10 (Bruno) date l'acte après l'échéance du mandat initial et calcule pourtant une
+  rémunération, alors que la ligne 46 ferme le droit pour un mandat **non renouvelé** ; le §4 des règles de calcul
+  dit « sauf renouvellement ». Lecture retenue : le droit se juge sur la **chaîne de renouvellement**
+  (`f_mandat_en_vigueur_chaine`), le délai S₁ part du **mandat initial** (`f_mandat_initial_chaine`,
+  exposé par `v_acte_mandat.id_mandat_initial`). Voir le journal des décisions métier, D13.
 
 ## 7. Tests (harnais `run_tests.py`)
 
@@ -127,7 +136,12 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
 | T28 | rémunération sur un autre mandat que celui de l'acte | trigger S25 |
 | T29 | `vente_externe` sur un mandat exclusif | `ck_mandat_vente_externe` |
 | T30 | acte hors dispositif sans source ni date de connaissance | `ck_acte_trace_hors_dispositif` |
+| T31 | acte redaté après l'échéance d'un mandat non renouvelé, rémunération existante (re-vérification différée) | trigger S26 |
+| T32 | mandat exclusif rendu non exclusif après un acte hors dispositif (re-vérification différée) | trigger S24 |
+| T33 | acte hors dispositif sur le mandat initial alors qu'un renouvellement est en vigueur | trigger S24 |
+| T34 | acte hors dispositif redaté après l'échéance de sa chaîne | trigger S24 |
 | P8 (valide) | achat hors dispositif sous mandat exclusif : acte + rémunération acceptés, mandat dérivé `clos_succes` | — |
+| P9 (valide) | cas de Bruno (D13) : vente après l'échéance du mandat initial, sous renouvellement ; rémunération sur le renouvellement ; initial « renouvelé », renouvellement « clos en succès » ; `id_mandat_initial` = mandat initial | — |
 
 Plus un test d'anonymisation : un client à achat hors dispositif est conservé (« transactionnel »).
 

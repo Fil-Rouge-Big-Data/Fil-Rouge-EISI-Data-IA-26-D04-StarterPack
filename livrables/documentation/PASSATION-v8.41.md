@@ -21,7 +21,7 @@ entreprise, données et personnages **fictifs**. Date de référence : **25 juil
 ## 2. Ce qui est DÉJÀ LIVRÉ (v8.41 — ne pas refaire)
 
 - **Base OLTP v8.41**, PostgreSQL 18 (compatible 16+), schéma `public`, clés
-  **UUIDv7**. **38 tables, 8 vues**, DDL rejouable/transactionnel, testé.
+  **UUIDv7**. **38 tables, 9 vues**, DDL rejouable/transactionnel, testé.
 - **Migration** de l'existant (base héritée) vers l'OLTP : pipeline **E-T-L-V**
   idempotent, **récurrent** (flux de rachats confirmé par le PO, voir ADR-050), journal d'anomalies.
 - **Job d'anonymisation RGPD** (routage prospect/client/transactionnel), DAG Airflow fourni.

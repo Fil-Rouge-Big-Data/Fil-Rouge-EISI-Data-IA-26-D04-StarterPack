@@ -76,6 +76,9 @@ ATTENDU = {
     "T24": "ck_acte_origine",       "T25": "ck_acte_origine",         "T26": "trigger",
     "T27": "trigger",               "T28": "trigger",                 "T29": "ck_mandat_vente_externe",
     "T30": "ck_acte_trace_hors_dispositif",
+    # ADR-053 / D13 (v8.42) : chaîne de renouvellement et re-vérification après coup
+    "T31": "trigger",               "T32": "trigger",                 "T33": "trigger",
+    "T34": "trigger",
 }
 
 # ADR-053 : renouvellement du mandat du seed (filiation, début = fin du précédent), exclusif ou non.
@@ -87,6 +90,16 @@ def _renouvellement(id_mandat, exclusif):
             "'11111111-0000-0000-0000-000000000001','11111111-0000-0000-0000-000000000003','88888888-0000-0000-0000-000000000001',"
             f"'REG-{id_mandat[-2:]}','2025-12-05','presentiel','2025-12-05','ATT-3401','2027-01-01',{str(exclusif).lower()},"
             "3.0,'TTC',20.0,'nom_propre'); ")
+
+# ADR-053 : renouvellement exclusif f8 (début 2025-12-05) + acte hors dispositif + rémunération,
+# jeu de départ partagé par P8 (valide) et par les tests de re-vérification après coup (T32, T34).
+_HORS_DISPOSITIF_F8 = (
+    "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('ac700000-0000-0000-0000-000000000008','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
+    "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
+    "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000008','11111111-0000-0000-0000-000000000001',"
+    "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001'); ")
 
 def verdict_rejet(identifiant, msg):
     """(ok, détail). OK seulement si la contrainte (ou le trigger) ATTENDU est celui qui a rejeté."""
@@ -169,6 +182,17 @@ REJETS = [
   + "UPDATE remuneration_chasseur SET id_mandat='88888888-0000-0000-0000-0000000000f8' WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
  ("T29 ADR-053 résiliation 'vente_externe' d'un mandat exclusif",
   "UPDATE mandat SET date_resiliation='2025-09-01', type_resiliation='vente_externe' WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
+ ("T31 D13 rémunération maintenue alors que l'acte est redaté après l'échéance d'un mandat non renouvelé (S26, re-vérification différée)",
+  "UPDATE acte SET date_signature='2026-01-10' WHERE id_acte='ac700000-0000-0000-0000-000000000001'; SET CONSTRAINTS ALL IMMEDIATE;"),
+ ("T32 D13 mandat exclusif rendu non exclusif après un acte hors dispositif (S24, re-vérification différée)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True) + _HORS_DISPOSITIF_F8
+  + "UPDATE mandat SET exclusif=false WHERE id_mandat='88888888-0000-0000-0000-0000000000f8'; SET CONSTRAINTS ALL IMMEDIATE;"),
+ ("T33 D13 acte hors dispositif sur le mandat initial alors qu'un renouvellement est en vigueur (S24)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES ('88888888-0000-0000-0000-000000000001','2026-01-10',300000,9000,'notaire','2026-02-01');"),
+ ("T34 D13 acte hors dispositif redaté après l'échéance de sa chaîne (S24)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True) + _HORS_DISPOSITIF_F8
+  + "UPDATE acte SET date_signature='2026-07-01' WHERE id_acte='ac700000-0000-0000-0000-000000000008';"),
  ("T30 ADR-053 acte hors dispositif sans source ni date de connaissance",
   "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe) VALUES ('88888888-0000-0000-0000-000000000001','2025-09-15',300000,9000);"),
  ("T20 C18 client poste commentaire privé",
@@ -187,15 +211,26 @@ VALIDES = [
  # ADR-053 : le client achète en direct sous mandat exclusif en vigueur -> acte sans compromis,
  # rémunération du chasseur du mandat, et le mandat est dérivé « clos_succes » dans v_mandat.
  ("P8  achat hors dispositif sous mandat exclusif : acte, rémunération, mandat clos en succès",
-  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
-  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
-    "('ac700000-0000-0000-0000-000000000008','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
-    "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
-    "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
-    "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000008','11111111-0000-0000-0000-000000000001',"
-    "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001'); "
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True) + _HORS_DISPOSITIF_F8
+  + "SET CONSTRAINTS ALL IMMEDIATE; "
     "DO $$ BEGIN IF (SELECT statut_calcule FROM v_mandat WHERE id_mandat='88888888-0000-0000-0000-0000000000f8') <> 'clos_succes' "
     "THEN RAISE EXCEPTION 'P8 : le mandat devrait être clos en succès'; END IF; END $$;"),
+ # D13 (cas de Bruno, .feature 10) : la vente aboutit après l'échéance du mandat initial, sous le
+ # renouvellement. L'acte reste rattaché à la proposition du mandat initial ; la rémunération porte
+ # sur le renouvellement en vigueur ; le mandat initial est « renouvelé », le renouvellement « clos en succès ».
+ ("P9  D13 vente sous mandat renouvelé : rémunération sur le renouvellement, initial = renouvelé",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "UPDATE acte SET date_signature='2026-02-01' WHERE id_acte='ac700000-0000-0000-0000-000000000001'; "
+    "UPDATE remuneration_chasseur SET id_mandat='88888888-0000-0000-0000-0000000000f8' WHERE id_acte='ac700000-0000-0000-0000-000000000001'; "
+    "SET CONSTRAINTS ALL IMMEDIATE; "
+    "DO $$ BEGIN "
+    "IF (SELECT statut_calcule FROM v_mandat WHERE id_mandat='88888888-0000-0000-0000-000000000001') <> 'renouvele' "
+    "THEN RAISE EXCEPTION 'P9 : le mandat initial devrait être renouvelé'; END IF; "
+    "IF (SELECT statut_calcule FROM v_mandat WHERE id_mandat='88888888-0000-0000-0000-0000000000f8') <> 'clos_succes' "
+    "THEN RAISE EXCEPTION 'P9 : le renouvellement devrait être clos en succès'; END IF; "
+    "IF (SELECT id_mandat_initial FROM v_acte_mandat WHERE id_acte='ac700000-0000-0000-0000-000000000001') <> '88888888-0000-0000-0000-000000000001' "
+    "THEN RAISE EXCEPTION 'P9 : le délai S1 doit partir du mandat initial'; END IF; "
+    "END $$;"),
 ]
 
 def savepoint_wrap(sql):

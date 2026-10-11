@@ -109,7 +109,7 @@ Sorties attendues :
 | Script | Attendu |
 |---|---|
 | `run_migration_docker.sh` | `[OK] source=historique lignes=153 anomalies=73`, `Validation OK`, `48 passed` |
-| `run_tests_docker.sh` | `REJETS : 30/30 correctement rejetés`, `VALIDES : 5/5 correctement acceptés` |
+| `run_tests_docker.sh` | `REJETS : 34/34 correctement rejetés`, `VALIDES : 6/6 correctement acceptés` |
 
 > ⚠️ **Les deux scripts remettent le schéma de `chasse_v8` à zéro** (`DROP SCHEMA public CASCADE`
 > puis rechargement) avant de s'exécuter : ils peuvent donc être lancés **dans n'importe quel
@@ -174,7 +174,7 @@ python livrables/db/verifier_dictionnaire.py           # échoue si la documenta
 | `Python 3 introuvable` | Python absent du PATH | installer Python 3.10+, cocher « Add to PATH » |
 | `ModuleNotFoundError: psycopg` / `yaml` | dépendances non installées, ou venv non activé **dans ce terminal** | étape 1 |
 | `bind: address already in use` (5433/5434) | un PostgreSQL local occupe déjà le port | l'arrêter, ou changer le port **hôte** dans `docker-compose.yml` (`127.0.0.1:55433:5432`) et les variables `*_PGPORT` |
-| `46` au lieu de `38` | la requête compte aussi les 8 vues | filtrer sur `table_type` (étape 3) : 38 tables + 8 vues |
+| `46` au lieu de `38` | la requête compte aussi les 9 vues | filtrer sur `table_type` (étape 3) : 38 tables + 9 vues |
 | `$'\r' : commande introuvable` | script enregistré avec des fins de ligne Windows (CRLF) | convertir en LF (éditeur) ; un `git clone` conserve LF grâce à `.gitattributes` |
 | `docker : commande introuvable` dans Git Bash | Docker Desktop non démarré ou PATH | démarrer Docker Desktop, rouvrir Git Bash |
 | Les scripts sont **très lents**, ou semblent figés sur « Migration… » (Windows) | `localhost` est d'abord essayé en IPv6 (`::1`) alors que Docker n'écoute qu'en IPv4 : chaque connexion perd du temps (mesuré sur un poste Windows : ~30 s, plafonné par le délai de la mesure, contre 0,03 s pour `127.0.0.1`), et un lancement ouvre 16 connexions | corrigé : les scripts imposent `127.0.0.1`, même si ton `.env` contient `localhost`. Dans tes propres commandes, utilise **toujours `127.0.0.1`**, jamais `localhost` |

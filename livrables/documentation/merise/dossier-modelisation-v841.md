@@ -6,7 +6,7 @@
 
 > ⚠️ Entreprise, données et personnages fictifs. Livrable pédagogique (RNCP40573).
 
-> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (38 tables, 8 vues),
+> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (38 tables, 9 vues),
 > sans renvoi à une version antérieure. Les décisions sont tracées par ADR. Le **sens métier** de chaque
 > colonne est dans `dictionnaire-donnees-v841.md` ; l'**exhaustivité** (type, nullité, clés, règles) dans
 > `dictionnaire-colonnes-v841.md`, généré depuis le DDL et vérifié automatiquement.
@@ -188,6 +188,7 @@ pour le suivi de performance (alimente l'OLAP, ADR-036).
 | `v_compromis` | état du compromis : signe / realise / caduc |
 | `v_version_courante` | version de critères en vigueur par demande (`no_version` maximal) |
 | `v_honoraires` | assiette d'honoraires par acte (arrondie) |
+| `v_acte_mandat` | mandat d'origine, mandat en vigueur et mandat initial de chaque acte (chaîne de renouvellement, D13) |
 | `v_conformite_chasseur` | habilitation/RCP expirée, `est_a_regulariser` (D-FLAG) |
 | `v_charge_gestionnaire` | charge de leads par gestionnaire |
 
