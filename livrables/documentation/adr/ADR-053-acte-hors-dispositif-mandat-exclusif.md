@@ -74,6 +74,11 @@ Mise en œuvre (v8.42) :
    obligatoires pour, et seulement pour, l'acte hors dispositif (`ck_acte_trace_hors_dispositif`).
 6. **Vues dérivées** : `v_mandat` (`a_acte`, `clos_succes`) et `v_demande` (`close`) cherchent l'acte
    par ses deux origines. Sans cela, un mandat rémunéré hors dispositif serait resté « actif » puis « échu ».
+   Les vues appellent `f_mandat_clos_par_acte`, qui trouve les actes de la chaîne **par index** (`f_actes_chaine`)
+   avant d'appeler `f_mandat_en_vigueur_chaine`. La première version (sous-requête corrélée sur `v_acte_mandat`)
+   évaluait la fonction de chaîne pour chaque acte et chaque mandat : sur 20 000 mandats et 6 000 actes, la
+   requête « mandats actifs d'un chasseur » dépassait 3 minutes ; elle prend 78 ms après restructuration, et
+   `v_mandat` complète 12,6 s (note d'indexation). Clés : `COST 10000` et `ROWS 2` sur les fonctions de chaîne.
 7. **Anonymisation** (`anonymiser.py`) : un client dont l'acte est hors dispositif est « transactionnel »
    (conservation légale longue), et non un prospect anonymisé au bout de 3 ans.
 

@@ -198,7 +198,7 @@ Résultat au 11/10/2026 (PostgreSQL 16.15) : **8 réussis, 1 sauté** sur chaque
 
 ## 7. Limites et suites
 
-- **Volumétrie** : construit et testé sur l'activité actuelle (52 lignes reprises). À la cible de l'énoncé (5 000 mandats par semaine, CDC ENF-03), les faits se partitionnent par date et les sous-requêtes corrélées de l'ETL passent en jointures agrégées ; la note de dimensionnement 3V (R : Alexandre Kechaf) doit chiffrer ce passage.
+- **Volumétrie** : construit et testé sur l'activité actuelle (52 lignes reprises) ; sur le jeu de volume de la note d'indexation (20 000 mandats, 6 000 ventes), la lecture complète de `v_mandat` prend 12,6 s. À la cible de l'énoncé (5 000 mandats par semaine, CDC ENF-03), les faits se partitionnent par date, l'ETL passe en chargement par delta et les sous-requêtes corrélées en jointures agrégées ; la note de dimensionnement 3V (R : Alexandre Kechaf) doit chiffrer ce passage.
 - **Chargement incrémental** : l'ETL recharge tout ; un chargement par delta (actes et mandats modifiés depuis la dernière exécution) est à prévoir avec l'orchestrateur.
 - **Historisation des dimensions** : type 1 (écrasement). Les changements de chasseur ou de zone ne sont pas historisés (pas de SCD 2) : décision à acter par ADR en phase 3.
 - **D13** : la lecture « chaîne de renouvellement » est appliquée ; elle attend la confirmation du Product Owner (journal des décisions).

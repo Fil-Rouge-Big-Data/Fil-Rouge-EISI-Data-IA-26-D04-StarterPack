@@ -65,6 +65,7 @@ Sans Docker : exporter `SRC_*` / `DST_*`, créer les deux bases, charger
 | Migration | `pytest livrables/migration/tests/` | 48 tests |
 | Anonymisation RGPD | `pytest livrables/jobs/anonymisation/` | 8 tests |
 | Entrepôt décisionnel (étoile, ETL, vues KPI) | `livrables/olap/*.sql` puis `pytest livrables/olap/tests` | 9 tests (dont D10 comptage des visites, D13 chaîne de renouvellement) |
+| Note d'indexation (EXPLAIN avant / après) | `livrables/db/perf/01_jeu_volume.sql` (jeu de volume) puis `python livrables/db/perf/mesurer_index.py` | `livrables/documentation/perf/note-indexation.md` régénérée |
 | Documentation contre schéma | `python livrables/db/verifier_dictionnaire.py` | cohérente (38 tables, 9 vues, 340 colonnes) |
 
 
