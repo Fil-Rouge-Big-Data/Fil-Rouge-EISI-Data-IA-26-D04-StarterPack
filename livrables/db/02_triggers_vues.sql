@@ -155,6 +155,201 @@ CREATE TRIGGER tg_acte_compromis_realise
     BEFORE INSERT OR UPDATE OF id_compromis ON acte
     FOR EACH ROW EXECUTE FUNCTION f_acte_compromis_valide();
 
+-- ------------------------------------------------------------
+-- ADR-053 / D13 : chaîne de renouvellement et droit à rémunération
+-- ------------------------------------------------------------
+-- Un mandat est « en vigueur » à une date s'il a commencé, n'est pas échu (6 mois, ADR-030)
+-- et n'est pas résilié avant cette date. Le droit à rémunération se juge sur la CHAÎNE
+-- (mandat initial + renouvellements, filiation id_mandat_precedent, ADR-048) : .feature 10
+-- l. 45-50 (acte après l'échéance d'un mandat NON renouvelé -> droit fermé) et §4 des règles
+-- de calcul (« sauf renouvellement du mandat »).
+
+-- COST 10000 sur les trois fonctions : chaque appel exécute une CTE récursive ; sans ce coût déclaré, le
+-- planificateur les évaluait AVANT les filtres d'égalité des vues (6 000 actes x 100 mandats, > 3 min).
+-- Tous les mandats de la chaîne à laquelle appartient p_mandat (initial et renouvellements).
+CREATE OR REPLACE FUNCTION f_chaine_mandats(p_mandat uuid) RETURNS SETOF uuid AS $$
+    WITH RECURSIVE amont AS (            -- remonte jusqu'au mandat initial
+        SELECT id_mandat, id_mandat_precedent FROM mandat WHERE id_mandat = p_mandat
+        UNION ALL
+        SELECT m.id_mandat, m.id_mandat_precedent FROM mandat m JOIN amont a ON m.id_mandat = a.id_mandat_precedent
+    ), aval AS (                         -- redescend vers tous les renouvellements
+        SELECT id_mandat FROM amont WHERE id_mandat_precedent IS NULL
+        UNION ALL
+        SELECT m.id_mandat FROM mandat m JOIN aval v ON m.id_mandat_precedent = v.id_mandat
+    )
+    SELECT id_mandat FROM aval;
+$$ LANGUAGE sql STABLE COST 10000 ROWS 2;   -- ROWS 2 : sans cette estimation (1 000 par défaut), parcours complets au lieu des index
+
+-- Le mandat INITIAL de la chaîne : point de départ du délai de performance S1 (D13).
+CREATE OR REPLACE FUNCTION f_mandat_initial_chaine(p_mandat uuid) RETURNS uuid AS $$
+    WITH RECURSIVE amont AS (
+        SELECT id_mandat, id_mandat_precedent FROM mandat WHERE id_mandat = p_mandat
+        UNION ALL
+        SELECT m.id_mandat, m.id_mandat_precedent FROM mandat m JOIN amont a ON m.id_mandat = a.id_mandat_precedent
+    )
+    SELECT id_mandat FROM amont WHERE id_mandat_precedent IS NULL;
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- Le mandat de la chaîne EN VIGUEUR à la date p_date, ou NULL (droit fermé).
+-- Le jour où un renouvellement prend effet, c'est lui qui est retenu (date_debut la plus récente).
+CREATE OR REPLACE FUNCTION f_mandat_en_vigueur_chaine(p_mandat uuid, p_date date) RETURNS uuid AS $$
+    SELECT m.id_mandat
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN mandat m ON m.id_mandat = ch
+    WHERE p_date >= m.date_debut
+      AND p_date <= (m.date_debut + INTERVAL '6 months')::date
+      AND (m.date_resiliation IS NULL OR p_date <= m.date_resiliation)
+    ORDER BY m.date_debut DESC
+    LIMIT 1;
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- Les actes rattachés à une chaîne de mandats, par leurs deux origines, EN PARTANT DES INDEX (acte.id_mandat,
+-- proposition.id_mandat) : c'est l'inverse de v_acte_mandat, qui part de l'acte. Sert aux vues d'état.
+CREATE OR REPLACE FUNCTION f_actes_chaine(p_mandat uuid)
+RETURNS TABLE (id_acte uuid, id_mandat_origine uuid, date_signature date) AS $$
+    SELECT a.id_acte, a.id_mandat, a.date_signature
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN acte a ON a.id_mandat = ch
+    UNION ALL
+    SELECT a.id_acte, p.id_mandat, a.date_signature
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN proposition p       ON p.id_mandat = ch
+    JOIN offre_acquisition o ON o.id_proposition = p.id_proposition
+    JOIN compromis co        ON co.id_offre = o.id_offre
+    JOIN acte a              ON a.id_compromis = co.id_compromis;
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- Vrai si un acte de la chaîne rémunère CE mandat (= mandat en vigueur à la date de l'acte). Corps de
+-- fonction = barrière d'optimisation : les actes candidats sont trouvés par index AVANT l'appel coûteux
+-- à f_mandat_en_vigueur_chaine (sans cela, une sous-requête corrélée dans v_mandat l'évaluait pour chaque
+-- acte et chaque mandat : > 3 min sur 20 000 mandats, mesure de la note d'indexation).
+CREATE OR REPLACE FUNCTION f_mandat_clos_par_acte(p_mandat uuid) RETURNS boolean AS $$
+    SELECT EXISTS (SELECT 1 FROM f_actes_chaine(p_mandat) x
+                   WHERE f_mandat_en_vigueur_chaine(x.id_mandat_origine, x.date_signature) = p_mandat);
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- S24 : un acte hors dispositif (sans compromis) référence le mandat EN VIGUEUR de sa chaîne à la
+-- date de l'acte, et ce mandat est EXCLUSIF (Readme l. 75, US 00 et 10). Sous mandat non exclusif,
+-- l'achat ailleurs clôt le mandat ('vente_externe', ADR-049). Fonction de contrôle réutilisée
+-- par le trigger d'écriture et par la re-vérification après coup.
+CREATE OR REPLACE FUNCTION f_verifier_acte_hors_dispositif(p_acte uuid, p_mandat uuid, p_date date) RETURNS void AS $$
+DECLARE v uuid; v_exclusif boolean;
+BEGIN
+    IF p_mandat IS NULL THEN RETURN; END IF;               -- vente menée par le chasseur (compromis)
+    v := f_mandat_en_vigueur_chaine(p_mandat, p_date);
+    IF v IS NULL THEN
+        RAISE EXCEPTION 'S24 : acte hors dispositif % refusé, aucun mandat de la chaîne de % n''est en vigueur le %', p_acte, p_mandat, p_date;
+    END IF;
+    IF v <> p_mandat THEN
+        RAISE EXCEPTION 'S24 : acte hors dispositif % refusé, le mandat en vigueur le % est le renouvellement %, pas %', p_acte, p_date, v, p_mandat;
+    END IF;
+    SELECT exclusif INTO v_exclusif FROM mandat WHERE id_mandat = v;
+    IF NOT v_exclusif THEN
+        RAISE EXCEPTION 'S24 : acte hors dispositif % refusé, le mandat % n''est pas exclusif', p_acte, v;
+    END IF;
+END; $$ LANGUAGE plpgsql;
+
+-- S25 / S26 : la rémunération porte sur le mandat de la chaîne EN VIGUEUR à la date de l'acte,
+-- quelle que soit l'origine de l'acte (chaîne compromis -> offre -> proposition, ou mandat direct).
+-- S26 : si aucun mandat de la chaîne n'est en vigueur, le droit est fermé (.feature 10 l. 45-50).
+-- La FK composée fk_remuneration_mandat garantit déjà chasseur = chasseur du mandat.
+CREATE OR REPLACE FUNCTION f_verifier_remuneration(p_acte uuid, p_mandat uuid) RETURNS void AS $$
+DECLARE v_racine uuid; v_date date; v uuid;
+BEGIN
+    SELECT COALESCE(a.id_mandat, p.id_mandat), a.date_signature INTO v_racine, v_date
+    FROM acte a
+    LEFT JOIN compromis co        ON co.id_compromis = a.id_compromis
+    LEFT JOIN offre_acquisition o ON o.id_offre = co.id_offre
+    LEFT JOIN proposition p       ON p.id_proposition = o.id_proposition
+    WHERE a.id_acte = p_acte;
+    v := f_mandat_en_vigueur_chaine(v_racine, v_date);
+    IF v IS NULL THEN
+        RAISE EXCEPTION 'S26 : droit fermé, aucun mandat de la chaîne de % n''est en vigueur à la date de l''acte % (%)', v_racine, p_acte, v_date;
+    END IF;
+    IF v <> p_mandat THEN
+        RAISE EXCEPTION 'S25 : la rémunération doit porter sur le mandat en vigueur à l''acte (acte %, mandat en vigueur %, mandat saisi %)', p_acte, v, p_mandat;
+    END IF;
+END; $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION f_acte_hors_dispositif() RETURNS trigger AS $$
+BEGIN
+    PERFORM f_verifier_acte_hors_dispositif(NEW.id_acte, NEW.id_mandat, NEW.date_signature);
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_acte_hors_dispositif
+    BEFORE INSERT OR UPDATE OF id_mandat, date_signature ON acte
+    FOR EACH ROW EXECUTE FUNCTION f_acte_hors_dispositif();
+
+CREATE OR REPLACE FUNCTION f_remuneration_mandat_acte() RETURNS trigger AS $$
+BEGIN
+    PERFORM f_verifier_remuneration(NEW.id_acte, NEW.id_mandat);
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_remuneration_mandat_acte
+    BEFORE INSERT OR UPDATE OF id_acte, id_mandat ON remuneration_chasseur
+    FOR EACH ROW EXECUTE FUNCTION f_remuneration_mandat_acte();
+
+-- Re-vérification APRÈS COUP (contournement) : modifier un mandat (exclusivité, dates, résiliation,
+-- filiation) ou un acte (mandat, compromis, date) après l'écriture de l'acte ou de la rémunération
+-- ne doit pas les rendre incohérents. Déclencheurs de contrainte DIFFÉRÉS : contrôlés au commit,
+-- pour laisser une transaction applicative enchaîner plusieurs mises à jour
+-- (ex. renouvellement : mettre à jour l'acte puis la rémunération). SET CONSTRAINTS ALL IMMEDIATE
+-- force le contrôle sans attendre le commit (utilisé par le harnais de tests).
+CREATE OR REPLACE FUNCTION f_reverifier_apres_mandat() RETURNS trigger AS $$
+DECLARE r record;
+BEGIN
+    FOR r IN SELECT a.id_acte, a.id_mandat, a.date_signature FROM acte a
+             WHERE a.id_mandat IN (SELECT f_chaine_mandats(NEW.id_mandat)
+                                   UNION SELECT f_chaine_mandats(OLD.id_mandat_precedent))
+    LOOP
+        PERFORM f_verifier_acte_hors_dispositif(r.id_acte, r.id_mandat, r.date_signature);
+    END LOOP;
+    FOR r IN SELECT rc.id_acte, rc.id_mandat FROM remuneration_chasseur rc
+             WHERE rc.id_mandat IN (SELECT f_chaine_mandats(NEW.id_mandat)
+                                    UNION SELECT f_chaine_mandats(OLD.id_mandat_precedent))
+    LOOP
+        PERFORM f_verifier_remuneration(r.id_acte, r.id_mandat);
+    END LOOP;
+    RETURN NULL;
+END; $$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER tg_mandat_reverification
+    AFTER UPDATE OF exclusif, date_debut, date_signature, date_resiliation, type_resiliation, id_mandat_precedent ON mandat
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION f_reverifier_apres_mandat();
+
+CREATE OR REPLACE FUNCTION f_reverifier_apres_acte() RETURNS trigger AS $$
+DECLARE r record;
+BEGIN
+    FOR r IN SELECT rc.id_acte, rc.id_mandat FROM remuneration_chasseur rc WHERE rc.id_acte = NEW.id_acte
+    LOOP
+        PERFORM f_verifier_remuneration(r.id_acte, r.id_mandat);
+    END LOOP;
+    RETURN NULL;
+END; $$ LANGUAGE plpgsql;
+
+CREATE CONSTRAINT TRIGGER tg_acte_reverification
+    AFTER UPDATE OF id_mandat, id_compromis, date_signature ON acte
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION f_reverifier_apres_acte();
+
+-- ADR-053 / D13 : pour chaque acte, le mandat d'ORIGINE (chaîne de vente ou hors dispositif),
+-- le mandat EN VIGUEUR de sa chaîne à la date de l'acte (celui que rémunère remuneration_chasseur)
+-- et le mandat INITIAL (point de départ du délai S1). Sert aux vues d'état et à l'entrepôt.
+CREATE VIEW v_acte_mandat AS
+SELECT a.id_acte,
+       a.date_signature,
+       (a.id_mandat IS NOT NULL)                                                            AS hors_dispositif,
+       COALESCE(a.id_mandat, p.id_mandat)                                                   AS id_mandat_origine,
+       f_mandat_en_vigueur_chaine(COALESCE(a.id_mandat, p.id_mandat), a.date_signature)    AS id_mandat_en_vigueur,
+       f_mandat_initial_chaine(COALESCE(a.id_mandat, p.id_mandat))                         AS id_mandat_initial
+FROM acte a
+LEFT JOIN compromis co        ON co.id_compromis = a.id_compromis
+LEFT JOIN offre_acquisition o ON o.id_offre = co.id_offre
+LEFT JOIN proposition p       ON p.id_proposition = o.id_proposition;
+
 -- Mandat : date_fin et expiration calculées (ADR-030), jamais stockées
 -- ADR-048 : état du mandat ENTIÈREMENT DÉRIVÉ des faits. Aucun statut stocké.
 CREATE VIEW v_mandat AS
@@ -162,10 +357,11 @@ SELECT m.*,
        (m.date_debut + INTERVAL '6 months')::date AS date_fin,
        ((m.date_debut + INTERVAL '6 months')::date < date_reference()) AS est_expire,
        -- faits dérivés
-       EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
-               JOIN offre_acquisition o ON o.id_offre=co.id_offre
-               JOIN proposition p ON p.id_proposition=o.id_proposition
-               WHERE p.id_mandat = m.id_mandat) AS a_acte,
+       -- ADR-053 / D13 : l'acte (chaîne de vente ou hors dispositif) est rattaché au mandat de la
+       -- chaîne EN VIGUEUR à sa date (v_acte_mandat) : le mandat initial d'une chaîne renouvelée
+       -- est « renouvelé », le renouvellement qui aboutit est « clos en succès ».
+       -- f_mandat_clos_par_acte : actes de la chaîne trouvés par index, puis mandat en vigueur (ADR-053 / D13)
+       f_mandat_clos_par_acte(m.id_mandat) AS a_acte,
        EXISTS (SELECT 1 FROM mandat s WHERE s.id_mandat_precedent = m.id_mandat) AS a_successeur,
        -- statut officiel : ADR-048 « repris fait foi ». Si un état repris existe
        -- (fait historique non recalculable, flux de rachats), il prime ; sinon on
@@ -175,10 +371,7 @@ SELECT m.*,
           WHERE mr.id_mandat = m.id_mandat),
          CASE
            WHEN m.date_resiliation IS NOT NULL THEN 'resilie'
-           WHEN EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
-                        JOIN offre_acquisition o ON o.id_offre=co.id_offre
-                        JOIN proposition p ON p.id_proposition=o.id_proposition
-                        WHERE p.id_mandat = m.id_mandat) THEN 'clos_succes'
+           WHEN f_mandat_clos_par_acte(m.id_mandat) THEN 'clos_succes'  -- ADR-053 / D13
            WHEN EXISTS (SELECT 1 FROM mandat s WHERE s.id_mandat_precedent = m.id_mandat) THEN 'renouvele'
            WHEN (m.date_debut + INTERVAL '6 months')::date >= date_reference() THEN 'actif'
            ELSE 'echu'
@@ -208,10 +401,8 @@ CREATE VIEW v_demande AS
 SELECT d.*,
        CASE
          WHEN d.date_sans_suite IS NOT NULL THEN 'sans_suite'
-         WHEN EXISTS (SELECT 1 FROM acte a JOIN compromis co ON co.id_compromis=a.id_compromis
-                      JOIN offre_acquisition o ON o.id_offre=co.id_offre
-                      JOIN proposition p ON p.id_proposition=o.id_proposition
-                      WHERE p.id_mandat = d.id_mandat_courant) THEN 'close'
+         -- ADR-053 / D13 : la demande est close dès qu'un acte rémunère un mandat de la demande
+         WHEN EXISTS (SELECT 1 FROM mandat mo WHERE mo.id_demande = d.id_demande AND f_mandat_clos_par_acte(mo.id_mandat)) THEN 'close'
          WHEN d.id_mandat_courant IS NOT NULL THEN 'en_recherche'
          WHEN d.date_qualification IS NOT NULL THEN 'qualifie'
          WHEN d.date_affectation IS NOT NULL THEN 'affecte'

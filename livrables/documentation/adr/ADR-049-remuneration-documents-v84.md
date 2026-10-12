@@ -1,6 +1,6 @@
 # ADR-049 — Rémunération gelée, droit dérivé & documents (v8.4)
 
-> **Statut :** Accepté · **Date :** 2026-10-07 · **Complète :** ADR-031, ADR-042 · **Déclencheur :** revue v8.1.
+> **Statut :** Accepté · **Date :** 2026-10-07 · **Complète :** ADR-031, ADR-042 · **Déclencheur :** revue v8.1 · **Complété par :** ADR-053 (achat hors dispositif sous mandat exclusif, v8.42).
 
 ## 1. Contexte
 
@@ -51,24 +51,30 @@ jamais d'acte. C'est faux pour le mandat exclusif. Le tableau correct est :
 | --- | --- | --- | --- |
 | exclusif | le chasseur | ouvert | oui (chaîne proposition → compromis → acte) |
 | exclusif | le client, en dehors du dispositif | **ouvert** | **oui** (acte sans compromis amont, rattaché au mandat) |
-| exclusif | le client achète via une autre agence | **ouvert** | **oui** (même logique : le notaire est informé du mandat) |
+| exclusif | le client achète par l'agence **du vendeur** (aucun autre chasseur ne peut le représenter, `.feature 00` l. 20) | **ouvert** | **oui** (même logique : le notaire est informé du mandat) |
 | non-exclusif | le chasseur | ouvert | oui (chaîne complète) |
 | non-exclusif | le client, en dehors du dispositif | **fermé** | non → résiliation `vente_externe` |
 | non-exclusif | un chasseur d'une autre agence | **fermé** | non → résiliation `vente_externe` |
 
-**Impact sur le schéma (v8.42, pas dans cette PR) :**
+**Mise en œuvre (v8.42, ADR-053) :**
 - `acte.id_compromis` devient **nullable** ; ajout de `acte.id_mandat` (FK → `mandat`) ;
 - exactement un des deux renseigné : `CHECK ((id_compromis IS NULL) <> (id_mandat IS NULL))` ;
 - **trigger** : un acte sans compromis n'est accepté que sur un mandat **exclusif en cours de
   validité** à la date de l'acte (garde d'exclusivité, test T-DR-01, CDC PO-11) ;
 - `v_mandat` (`a_acte`, `clos_succes`) et `v_demande` (`close`) reconnaissent les deux chemins ;
-- convention des scores gelés pour une vente externe : `score_visites` = 0 (aucune visite du
-  chasseur), les autres composantes reflètent l'historique du chasseur sur ce mandat ;
+- `vente_externe` réservé au mandat non exclusif (`ck_mandat_vente_externe`) : sous mandat exclusif,
+  l'achat hors dispositif clôt le mandat **en succès**, pas par une résiliation ;
+- l'acte hors dispositif trace la **source de l'information** (`client`, `notaire`, `autre`) et la
+  **date à laquelle l'agence l'a apprise** (`source_information`, `date_connaissance`) : le notaire du
+  client n'est pas tenu de connaître le mandat, l'agence l'apprend souvent après coup ;
+- convention des scores gelés pour une vente hors dispositif : `score_visites` = note issue des
+  **visites réelles** du client sur les propositions du mandat (§5) ; **note neutre de 50** si aucune
+  visite n'a eu lieu. `score_delai` et `score_exclusivite` sont calculés sur le mandat ;
+  `score_ventes` et `score_mandats` sur les 12 mois glissants du chasseur ;
 - MCD, MLD, MPD, dictionnaire, `verifier_dictionnaire.py` à mettre à jour (acte–compromis passe
   de 1,1 à 0,1 ; nouvelle association acte–mandat).
 
-**Dans cette PR (v8.41) :** documentation seule. Le commentaire DDL sur `vente_externe` est corrigé
-pour ne plus réserver ce type au non-exclusif. Le schéma changera en v8.42.
+**v8.41 :** documentation seule. **v8.42 :** schéma, vues, gardes et tests (ADR-053).
 
 Si un acte est créé à tort, la rémunération peut être annulée (`date_annulation` +
 `motif_annulation`), mais la base ne refuse pas l'insertion.
@@ -101,19 +107,38 @@ BC01 (décisions tracées), BC03 (intégrité SGBD, gel juridique), BC05 (donné
 par date : deux personnes (le chasseur et le client, un couple d'acquéreurs) peuvent visiter le même
 bien le même jour et produire chacune une ligne.
 
-**Convention retenue.** Une visite est un **fait par participant**. Le score de visites du chasseur
-(`score_visites`, pondération 25) se calcule en comptant les **visites réalisées par le client** sur
-les propositions du mandat concerné, sur les 12 mois glissants précédant l'acte :
+**Convention retenue.** En base, une visite est un **fait par participant** : chaque personne présente
+produit une ligne. Pour le score, en revanche, l'unité est le **rendez-vous** (révision v8.42) :
+
+| Qui est présent | Rendez-vous | Compte dans `score_visites` ? |
+| --- | --- | --- |
+| Chasseur seul (reconnaissance) | 1 | **Non** : travail préparatoire, il porte la note d'avis |
+| Chasseur + 1 acquéreur | 1 | Oui |
+| Chasseur + couple d'acquéreurs | 1 | Oui (et non 2) |
+| Acquéreur(s) seul(s), avec le vendeur ou son agent | 1 | Oui |
+
+Le score de visites du chasseur (`score_visites`, pondération 25) se calcule en comptant les
+**rendez-vous réalisés** où au moins un **acquéreur de la demande** est présent, sur les propositions du
+mandat, sur les 12 mois glissants précédant l'acte :
 
 ```sql
-SELECT count(*)
+SELECT count(DISTINCT (v.id_proposition, v.date_visite))
 FROM visite v
-JOIN proposition p ON p.id_proposition = v.id_proposition
+JOIN proposition p        ON p.id_proposition = v.id_proposition
+JOIN demande_acquereur da ON da.id_demande = p.id_demande
+                         AND da.id_client = v.id_visiteur
 WHERE p.id_mandat = :id_mandat
   AND v.realisee = true
-  AND EXISTS (SELECT 1 FROM client c WHERE c.id_utilisateur = v.id_visiteur)
   AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
 ```
+
+- `count(DISTINCT …)` : un couple produit deux lignes pour un seul rendez-vous ; un `count(*)` le
+  compterait deux fois (5 visites en couple → 10 → note ≈ 47 au lieu de 80).
+- `demande_acquereur` plutôt qu'un test sur `client` : un chasseur peut aussi être client (cumul) ; il
+  ne doit pas être compté comme acquéreur de la demande sur laquelle il travaille.
+- Limite : `date_visite` n'a pas d'heure ; deux rendez-vous sur le même bien le même jour comptent pour un.
+- Vente hors dispositif : même requête (visites réelles sur les propositions du mandat) ; note neutre de
+  50 si elle renvoie 0 (§2.3).
 
 Ce comptage est une **règle OLAP** (ou du moteur de calcul de la rémunération), pas une contrainte
 d'intégrité. La base ne porte pas de `UNIQUE` sur `(id_proposition, date_visite)` : cela interdirait

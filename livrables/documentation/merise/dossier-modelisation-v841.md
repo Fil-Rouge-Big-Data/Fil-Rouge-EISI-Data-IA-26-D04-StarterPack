@@ -6,7 +6,7 @@
 
 > ⚠️ Entreprise, données et personnages fictifs. Livrable pédagogique (RNCP40573).
 
-> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (38 tables, 8 vues),
+> **Document autonome.** Il décrit **l'intégralité** du modèle v8.41 (38 tables, 9 vues),
 > sans renvoi à une version antérieure. Les décisions sont tracées par ADR. Le **sens métier** de chaque
 > colonne est dans `dictionnaire-donnees-v841.md` ; l'**exhaustivité** (type, nullité, clés, règles) dans
 > `dictionnaire-colonnes-v841.md`, généré depuis le DDL et vérifié automatiquement.
@@ -44,7 +44,7 @@ rétribution après concrétisation.
 | **Si calculable, pas stocké** | aucun statut de progression : l'état du mandat, de la demande et du compromis est dérivé en vues ; seuls les faits et les écarts datés (résiliation, caducité, sans-suite) sont stockés | ADR-030, ADR-048 |
 | **Reproductibilité temporelle** | `date_reference()` au lieu de `current_date` | ADR-047 |
 | **Pas de DELETE physique** | cycle de vie par faits datés + anonymisation (jamais de suppression) | ADR-043, ADR-048 |
-| **Le droit à rémunération se dérive de l'acte** | un acte est toujours une vente menée par le chasseur ; une vente externe ne crée pas d'acte (elle clôt le mandat) | ADR-049 |
+| **Le droit à rémunération se dérive de l'acte** | un acte est une vente menée par le chasseur ou un achat hors dispositif sous mandat exclusif ; une vente externe sous mandat non exclusif ne crée pas d'acte (elle clôt le mandat) | ADR-049, ADR-053 |
 | **Intention du client à 4 états** | critère `exige` / `souhaite` / `exclut` / `indifferent` (« sans balcon » = refus) | ADR-052 |
 | Intégrité **déclarative** d'abord | FK composées, exclusions ; triggers si inter-lignes | ADR-045 |
 
@@ -84,7 +84,8 @@ erDiagram
     OFFRE_ACQUISITION ||--o| COMPROMIS : "aboutit à"
     NOTAIRE ||--o{ COMPROMIS : "instrumente"
     COMPROMIS ||--o{ CLAUSE_SUSPENSIVE : "est assorti de"
-    COMPROMIS ||--o| ACTE : "se réalise en"
+    COMPROMIS |o--o| ACTE : "se réalise en"
+    MANDAT |o--o| ACTE : "achat hors dispositif"
     ACTE ||--o| REMUNERATION_CHASSEUR : "génère"
     MANDAT ||--o{ REMUNERATION_CHASSEUR : "rémunère sur"
     BAREME ||--|{ TRANCHE_BAREME : "découpé en"
@@ -95,7 +96,7 @@ erDiagram
     MANDAT ||--o| PARRAINAGE : "concrétise"
 ```
 
-![MCD v8.41](mcd-v841-concept.png)
+![MCD v8.42](mcd-v841-concept.png)
 
 **Lecture des liens structurants.** Un `utilisateur` est spécialisé en `client`,
 `chasseur` ou `gestionnaire` (héritage par clé partagée). Une `demande` porte au
@@ -104,7 +105,8 @@ plusieurs `mandat` (renouvellements successifs, chaînés par `précédent`). Le
 contractuel se rattache au `mandat` : la proposition et la rémunération le référencent directement
 (clés étrangères composées), la note d'avis passe par la proposition. La
 chaîne de vente est linéaire et verrouillée : `offre → compromis → acte`, chaque
-étape conditionnée à la précédente (ADR-045).
+étape conditionnée à la précédente (ADR-045). Seule exception : l'achat hors dispositif
+sous mandat exclusif, dont l'acte se rattache directement au mandat (ADR-053).
 
 ---
 
@@ -113,7 +115,9 @@ chaîne de vente est linéaire et verrouillée : `offre → compromis → acte`,
 Diagramme généré depuis les **clés étrangères du schéma réel** (une flèche = une clé étrangère, du parent
 vers l'enfant). Le détail colonne par colonne est dans `dictionnaire-colonnes-v841.md` :
 
-![MLD v8.41 relationnel](mld-v841-relationnel.png)
+![MLD v8.42 relationnel](mld-v841-relationnel.png)
+
+*Les deux images sont produites par Graphviz à partir du dossier [sources](sources/). Le MCD est rédigé à la main ; le MLD est généré à partir des clés étrangères du DDL, il ne peut donc pas dériver du schéma. Régénération : `python livrables/documentation/merise/sources/generer_diagrammes.py`.*
 
 Six domaines : **acteurs** (utilisateur et spécialisations, parrainage),
 **demande** (besoin, versions, affectation, zones), **biens** (bien, annonce,
@@ -154,8 +158,10 @@ proposition**), `document` (métadonnées ; octets hors base, ADR-042) relié au
 ### 5.4 Vente
 Chaîne linéaire verrouillée : `offre_acquisition` (acceptée) → `compromis`
 (réalisé, chez un `notaire`, avec `clause_suspensive`) → `acte` (encaissement
-des honoraires tracé). Triggers d'intégrité (ADR-045). **Une vente externe** (mandat non exclusif, achat
-ailleurs) ne crée pas d'acte : elle clôt le mandat (`type_resiliation = 'vente_externe'`, ADR-049).
+des honoraires tracé). Triggers d'intégrité (ADR-045). **Achat hors dispositif sous mandat exclusif** (le client achète en
+direct, particulier ou autre agence) : l'acte n'a pas de compromis et se rattache au mandat, qui doit être
+exclusif et en vigueur à la date de l'acte ; le droit à rémunération est ouvert (ADR-053). **Une vente
+externe sous mandat non exclusif** ne crée pas d'acte : elle clôt le mandat (`type_resiliation = 'vente_externe'`, ADR-049).
 
 ### 5.5 Rémunération
 `bareme` (défaut ou par chasseur, versionné, sans chevauchement) découpé en
@@ -182,6 +188,7 @@ pour le suivi de performance (alimente l'OLAP, ADR-036).
 | `v_compromis` | état du compromis : signe / realise / caduc |
 | `v_version_courante` | version de critères en vigueur par demande (`no_version` maximal) |
 | `v_honoraires` | assiette d'honoraires par acte (arrondie) |
+| `v_acte_mandat` | mandat d'origine, mandat en vigueur et mandat initial de chaque acte (chaîne de renouvellement, D13) |
 | `v_conformite_chasseur` | habilitation/RCP expirée, `est_a_regulariser` (D-FLAG) |
 | `v_charge_gestionnaire` | charge de leads par gestionnaire |
 

@@ -1,0 +1,60 @@
+// MCD conceptuel v8.42 — source Graphviz de mcd-v841-concept.png
+// Régénérer : python livrables/documentation/merise/sources/generer_diagrammes.py
+digraph MCD {
+  graph [label="MCD conceptuel v8.42 — entités et associations principales\n(vert = parrainage ; orange = mandat ; violet = rémunération ; gris = média / reprise ; trait orange = ajouté en v8.42)",
+         labelloc=t, fontname="Helvetica-Bold", fontsize=16, nodesep=0.5, ranksep=0.55, pad=0.2];
+  node  [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11,
+         fillcolor="#e8f0fe", color="#4a7bd0", margin="0.15,0.08"];
+  edge  [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.8];
+
+  MANDAT              [fillcolor="#fff0e6", color="#e8710a", penwidth=2];
+  BAREME              [fillcolor="#f3e8fd", color="#8e3fd6"];
+  REMUNERATION_CHASSEUR [fillcolor="#f3e8fd", color="#8e3fd6"];
+  FACTURE_CHASSEUR    [fillcolor="#f3e8fd", color="#8e3fd6"];
+  PARRAINAGE          [fillcolor="#e6f4ea", color="#34a853"];
+  MANDAT_REPRISE      [fillcolor="#f1f3f4", color="#80868b", style="rounded,filled,dashed"];
+  DOCUMENT            [fillcolor="#f1f3f4", color="#80868b"];
+
+  // Spécialisation de l'utilisateur
+  UTILISATEUR -> GESTIONNAIRE [label="est un", arrowhead=none];
+  UTILISATEUR -> CHASSEUR     [label="est un", arrowhead=none];
+  UTILISATEUR -> CLIENT       [label="est un", arrowhead=none];
+  UTILISATEUR -> PARRAINAGE   [label="parraine"];
+
+  // Demande et affectation
+  CLIENT       -> DEMANDE         [label="1,n dépose"];
+  GESTIONNAIRE -> AFFECTATION     [label="affecte"];
+  CHASSEUR     -> AFFECTATION     [label="reçoit"];
+  DEMANDE      -> AFFECTATION     [label="est affectée"];
+  DEMANDE      -> DEMANDE_VERSION [label="1,n versionne\n(préférences pref_*)"];
+
+  // Mandat
+  CHASSEUR -> BAREME          [label="a (ou défaut)"];
+  CHASSEUR -> MANDAT          [label="signe"];
+  DEMANDE  -> MANDAT          [label="0,n donne lieu à"];
+  MANDAT   -> MANDAT          [label="renouvelle"];
+  MANDAT   -> PARRAINAGE      [label="concrétise", style=dashed];
+  MANDAT   -> MANDAT_REPRISE  [label="état repris\n(migration)", style=dashed];
+
+  // Recherche et visites
+  MANDAT      -> PROPOSITION       [label="cadre"];
+  BIEN        -> PROPOSITION       [label="est proposé"];
+  PROPOSITION -> OFFRE_ACQUISITION [label="mène à"];
+  PROPOSITION -> VISITE            [label="donne lieu à"];
+  PROPOSITION -> NOTE_AVIS         [label="0,1 fait l'objet de"];
+
+  // Vente
+  NOTAIRE           -> COMPROMIS [label="instrumente"];
+  OFFRE_ACQUISITION -> COMPROMIS [label="aboutit\n(si acceptée)"];
+  COMPROMIS         -> ACTE      [label="0,1 se réalise en\n(vente par le chasseur)"];
+  // v8.42 / ADR-053 : achat hors dispositif sous mandat exclusif, acte sans compromis
+  MANDAT            -> ACTE      [label="0,1 achat hors dispositif\n(mandat exclusif, ADR-053)", color="#e8710a", fontcolor="#e8710a", penwidth=2];
+
+  // Rémunération et documents
+  ACTE                  -> REMUNERATION_CHASSEUR [label="génère"];
+  BAREME                -> REMUNERATION_CHASSEUR [label="appliqué"];
+  MANDAT                -> REMUNERATION_CHASSEUR [label="rémunère sur"];
+  REMUNERATION_CHASSEUR -> FACTURE_CHASSEUR      [label="0,1 facturée"];
+  FACTURE_CHASSEUR      -> DOCUMENT              [label="joint (PDF)"];
+  NOTE_AVIS             -> DOCUMENT              [label="joint (média)"];
+}
