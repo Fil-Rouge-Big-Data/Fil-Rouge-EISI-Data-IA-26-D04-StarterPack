@@ -10,7 +10,9 @@ REQUIRE_DB=1 force l'échec (CI). Lancement : voir run_tests_docker.sh.
 5. formules financières (marge = honoraires − part chasseur) ;
 6. RGPD : aucune donnée identifiante dans dim_client, statut d'anonymisation reflété (ADR-043, RB4) ;
 7. D10 : une visite en couple compte une fois, la reconnaissance du chasseur ne compte pas ;
-8. D13 / ADR-053 : chaque vente est rattachée au mandat en vigueur et au mandat initial de sa chaîne.
+8. D13 / ADR-053 : chaque vente est rattachée au mandat en vigueur et au mandat initial de sa chaîne ;
+9. les vues n'additionnent jamais deux fois une vente (revue PR #15) : sommes des vues = sommes brutes des faits ;
+10. honoraires HT : conversion selon la base du mandat (TTC -> HT), rapprochée de l'OLTP (D19).
 """
 import os
 import pathlib
@@ -163,6 +165,60 @@ def test_d10_une_visite_par_rendez_vous(conn):
     finally:
         c.rollback()
         c.close()
+
+
+# 9. les vues n'additionnent pas deux fois (revue PR #15 : jointure de plusieurs faits sur une même clé) ------
+def test_vues_sans_multiplication(conn):
+    ca_vue = _un(conn, "SELECT COALESCE(sum(ca_honoraires_generes_ht), 0) FROM olap.v_kpi_performance_chasseurs")
+    ca_fait = _un(conn, "SELECT COALESCE(sum(honoraires_agence_ht), 0) FROM olap.fait_vente")
+    assert ca_vue == ca_fait, f"CA par chasseur : vue {ca_vue} / faits {ca_fait}"
+    rem_vue = _un(conn, "SELECT COALESCE(sum(total_remuneration_ht), 0) FROM olap.v_kpi_performance_chasseurs")
+    rem_fait = _un(conn, "SELECT COALESCE(sum(montant_remuneration_ht), 0) FROM olap.fait_remuneration_chasseur WHERE NOT est_annulee")
+    assert rem_vue == rem_fait, f"rémunération par chasseur : vue {rem_vue} / faits {rem_fait}"
+    ca_zone = _un(conn, "SELECT COALESCE(sum(ca_honoraires_ht), 0) FROM olap.v_kpi_analyse_geographique")
+    ca_zone_fait = _un(conn, "SELECT COALESCE(sum(honoraires_agence_ht), 0) FROM olap.fait_vente WHERE id_zone IS NOT NULL")
+    assert ca_zone == ca_zone_fait, f"CA par zone : vue {ca_zone} / faits {ca_zone_fait}"
+    mandats_vue = _un(conn, "SELECT COALESCE(sum(nb_mandats_total), 0) FROM olap.v_kpi_performance_chasseurs")
+    mandats_fait = _un(conn, "SELECT count(*) FROM olap.fait_mandat_cycle")
+    assert mandats_vue == mandats_fait
+
+
+def test_vues_sans_multiplication_avec_second_mandat(conn):
+    """Le cas d'Angeline : un 2e mandat SANS vente pour le chasseur du seed ne doit pas changer son CA.
+    Rejoué dans une transaction annulée, en recalculant la vue sur des faits temporairement enrichis."""
+    c = _conn()
+    c.autocommit = False
+    try:
+        with c.cursor() as cur:
+            cur.execute("SELECT id_chasseur, COALESCE(sum(ca_honoraires_generes_ht), 0), COALESCE(sum(total_remuneration_ht), 0) "
+                        "FROM olap.v_kpi_performance_chasseurs WHERE nb_ventes_conclues > 0 GROUP BY id_chasseur ORDER BY 2 DESC LIMIT 1")
+            row = cur.fetchone()
+            if row is None:
+                pytest.skip("aucune vente dans l'entrepôt")
+            id_chasseur, ca_avant, rem_avant = row
+            cur.execute("SELECT id_client, id_zone FROM olap.fait_mandat_cycle WHERE id_chasseur = %s LIMIT 1", (id_chasseur,))
+            id_client, id_zone = cur.fetchone()
+            cur.execute("INSERT INTO olap.fait_mandat_cycle (id_mandat, id_date_signature, id_date_fin_theorique, id_chasseur, id_zone, id_client, "
+                        "exclusif, statut_projete, duree_effective_jours) VALUES (gen_random_uuid(), 20250101, 20250701, %s, %s, %s, true, 'actif', 10)",
+                        (id_chasseur, id_zone, id_client))
+            cur.execute("SELECT ca_honoraires_generes_ht, total_remuneration_ht FROM olap.v_kpi_performance_chasseurs WHERE id_chasseur = %s", (id_chasseur,))
+            ca_apres, rem_apres = cur.fetchone()
+        assert (ca_apres, rem_apres) == (ca_avant, rem_avant), f"un mandat de plus a changé les montants : {ca_avant} -> {ca_apres}"
+    finally:
+        c.rollback()
+        c.close()
+
+
+# 10. honoraires HT (D19) ----------------------------------------------------------------------------
+def test_honoraires_ht(conn):
+    with conn.cursor() as cur:
+        cur.execute("SELECT f.id_acte, f.base_honoraires_mandat, f.taux_tva_mandat, f.honoraires_agence_brut, f.honoraires_agence_ht, vh.honoraires_total "
+                    "FROM olap.fait_vente f JOIN public.v_honoraires vh ON vh.id_acte = f.id_acte")
+        for id_acte, base, tva, brut, ht, total in cur.fetchall():
+            assert brut == total, f"brut ≠ OLTP sur {id_acte}"
+            attendu = round(total / (1 + tva / 100), 2) if base == "TTC" else total
+            assert ht == attendu, f"HT incohérent sur {id_acte} : {ht} ≠ {attendu} (base {base}, TVA {tva})"
+            assert ht <= brut
 
 
 # 8. D13 / ADR-053 -------------------------------------------------------------------------------

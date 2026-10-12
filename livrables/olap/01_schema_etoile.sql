@@ -128,7 +128,8 @@ CREATE TABLE IF NOT EXISTS olap.fait_vente (
     id_date_acte                integer NOT NULL REFERENCES olap.dim_temps(id_temps),
     id_chasseur                 uuid NOT NULL REFERENCES olap.dim_chasseur(id_chasseur),
     id_gestionnaire             uuid REFERENCES olap.dim_gestionnaire(id_gestionnaire),
-    id_zone                     uuid REFERENCES olap.dim_zone(id_zone),
+    id_zone                     uuid REFERENCES olap.dim_zone(id_zone),              -- zone DU BIEN vendu (NULL hors dispositif)
+    id_zone_recherche           uuid REFERENCES olap.dim_zone(id_zone),              -- zone RECHERCHÉE par le mandat (KPI-5, taux de succès)
     id_client                   uuid NOT NULL REFERENCES olap.dim_client(id_client),
     id_bien                     uuid REFERENCES olap.dim_bien(id_bien),
     id_mandat_en_vigueur        uuid NOT NULL,
@@ -139,8 +140,13 @@ CREATE TABLE IF NOT EXISTS olap.fait_vente (
     est_mandat_exclusif         boolean NOT NULL DEFAULT false,
 
     montant_acte_net_vendeur    numeric(12,2) NOT NULL,
+    -- Honoraires : l'OLTP calcule l'assiette comme l'énoncé la définit (fixe + % du prix), dans la base du
+    -- mandat (HT ou TTC). L'entrepôt garde ce brut ET le convertit en HT (revue PR #15, décision D19).
+    honoraires_agence_brut      numeric(10,2) NOT NULL,
+    base_honoraires_mandat      varchar(3) NOT NULL,                                 -- HT / TTC
+    taux_tva_mandat             numeric(5,2) NOT NULL,
     honoraires_agence_ht        numeric(10,2) NOT NULL,
-    remuneration_chasseur_ht    numeric(10,2) NOT NULL,
+    remuneration_chasseur_ht    numeric(10,2) NOT NULL,                              -- montant gelé par l'OLTP, réputé HT (D19)
     marge_brute_ht              numeric(10,2) NOT NULL,
     taux_marge_pct              numeric(5,2) NOT NULL,
 

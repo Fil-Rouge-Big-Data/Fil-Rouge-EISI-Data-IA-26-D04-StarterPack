@@ -11,9 +11,17 @@ BEGIN;
 -- 1. DIMENSIONS
 -- ------------------------------------------------------------
 
--- A. Temps : calendrier 2020-2030
+-- A. Temps : calendrier couvrant au moins 2020-2030 ET toutes les dates présentes dans l'OLTP (+ 1 an),
+--    pour qu'une date hors plage ne fasse jamais échouer un chargement (revue PR #15).
 INSERT INTO olap.dim_temps (id_temps, date_jour, annee, trimestre, mois, nom_mois,
                             jour, jour_semaine, nom_jour, semaine_annee, est_weekend, est_ouvre)
+WITH bornes AS (
+    SELECT LEAST(date '2020-01-01', min(d))::date AS debut, (GREATEST(date '2030-12-31', max(d)) + INTERVAL '1 year')::date AS fin
+    FROM (SELECT date_depot::date AS d FROM public.demande
+          UNION ALL SELECT date_signature FROM public.mandat
+          UNION ALL SELECT date_signature FROM public.acte
+          UNION ALL SELECT date_visite FROM public.visite) x
+)
 SELECT to_char(d, 'YYYYMMDD')::integer,
        d::date,
        EXTRACT(YEAR FROM d)::integer,
@@ -26,7 +34,7 @@ SELECT to_char(d, 'YYYYMMDD')::integer,
        EXTRACT(WEEK FROM d)::integer,
        EXTRACT(ISODOW FROM d)::integer IN (6, 7),
        EXTRACT(ISODOW FROM d)::integer BETWEEN 1 AND 5
-FROM generate_series('2020-01-01'::date, '2030-12-31'::date, '1 day'::interval) AS d
+FROM bornes, generate_series(bornes.debut, bornes.fin, '1 day'::interval) AS d
 ON CONFLICT (id_temps) DO NOTHING;
 
 -- B. Chasseur (habilitation Hoguet, ADR-046 ; pas d'e-mail dans l'entrepôt)
@@ -102,8 +110,9 @@ SELECT c.id_utilisateur,
        (u.date_anonymisation IS NOT NULL)
 FROM public.client c
 JOIN public.utilisateur u ON u.id_utilisateur = c.id_utilisateur
-LEFT JOIN LATERAL (SELECT da.id_demande FROM public.demande_acquereur da
-                   WHERE da.id_client = c.id_utilisateur ORDER BY (da.qualite = 'principal') DESC LIMIT 1) da_first ON true
+LEFT JOIN LATERAL (SELECT da.id_demande FROM public.demande_acquereur da JOIN public.demande dd ON dd.id_demande = da.id_demande
+                   WHERE da.id_client = c.id_utilisateur
+                   ORDER BY (da.qualite = 'principal') DESC, dd.date_depot DESC, da.id_demande LIMIT 1) da_first ON true   -- déterministe : demande principale la plus récente
 LEFT JOIN public.demande d ON d.id_demande = da_first.id_demande
 LEFT JOIN public.v_version_courante dv ON dv.id_demande = d.id_demande
 ON CONFLICT (id_client) DO UPDATE SET
@@ -122,8 +131,8 @@ SELECT vm.id_mandat,
        to_char(vm.date_signature, 'YYYYMMDD')::integer,
        to_char(vm.date_fin, 'YYYYMMDD')::integer,
        vm.id_chasseur,
-       (SELECT vz.id_zone FROM public.version_zone vz WHERE vz.id_version = vm.id_version_contractuelle LIMIT 1),
-       (SELECT da.id_client FROM public.demande_acquereur da WHERE da.id_demande = vm.id_demande AND da.qualite = 'principal' LIMIT 1),
+       (SELECT vz.id_zone FROM public.version_zone vz WHERE vz.id_version = vm.id_version_contractuelle ORDER BY vz.id_zone LIMIT 1),  -- première zone recherchée (ordre stable)
+       (SELECT da.id_client FROM public.demande_acquereur da WHERE da.id_demande = vm.id_demande AND da.qualite = 'principal'),      -- unique (ux_acquereur_principal)
        vm.id_mandat_precedent,
        vm.exclusif,
        vm.statut_calcule,
@@ -177,15 +186,17 @@ ON CONFLICT (id_demande) DO UPDATE SET
 
 -- Fait 1 : ventes. Deux origines (ADR-053) : chaîne de vente (bien connu) ou hors dispositif (bien inconnu).
 -- Mandat et chasseur = chaîne en vigueur à l'acte (v_acte_mandat, D13) ; délai S1 depuis le mandat initial.
-INSERT INTO olap.fait_vente (id_acte, id_date_acte, id_chasseur, id_gestionnaire, id_zone, id_client, id_bien,
+INSERT INTO olap.fait_vente (id_acte, id_date_acte, id_chasseur, id_gestionnaire, id_zone, id_zone_recherche, id_client, id_bien,
                              id_mandat_en_vigueur, id_mandat_initial, est_hors_dispositif, source_information, est_mandat_exclusif,
-                             montant_acte_net_vendeur, honoraires_agence_ht, remuneration_chasseur_ht, marge_brute_ht, taux_marge_pct,
+                             montant_acte_net_vendeur, honoraires_agence_brut, base_honoraires_mandat, taux_tva_mandat, honoraires_agence_ht,
+                             remuneration_chasseur_ht, marge_brute_ht, taux_marge_pct,
                              delai_depot_a_acte_jours, delai_mandat_a_acte_jours, nb_visites_effectuees, nb_propositions_recues)
 SELECT a.id_acte,
        to_char(a.date_signature, 'YYYYMMDD')::integer,
        mv.id_chasseur,
        d.id_gestionnaire,
        b.id_zone,
+       (SELECT vz.id_zone FROM public.version_zone vz WHERE vz.id_version = mv.id_version_contractuelle ORDER BY vz.id_zone LIMIT 1),
        da.id_client,
        b.id_bien,
        am.id_mandat_en_vigueur,
@@ -195,9 +206,12 @@ SELECT a.id_acte,
        mv.exclusif,
        a.montant_vente,
        vh.honoraires_total,
+       mv.base_honoraires,
+       mv.taux_tva,
+       h.ht,
        COALESCE(rc.montant, 0.00),
-       vh.honoraires_total - COALESCE(rc.montant, 0.00),
-       round(((vh.honoraires_total - COALESCE(rc.montant, 0.00)) / NULLIF(vh.honoraires_total, 0) * 100)::numeric, 2),
+       h.ht - COALESCE(rc.montant, 0.00),
+       round(((h.ht - COALESCE(rc.montant, 0.00)) / NULLIF(h.ht, 0) * 100)::numeric, 2),
        (a.date_signature - d.date_depot::date)::integer,
        (a.date_signature - mi.date_signature)::integer,
        olap.f_nb_visites(am.id_mandat_en_vigueur, a.date_signature, true),
@@ -209,6 +223,9 @@ JOIN public.mandat mi            ON mi.id_mandat = am.id_mandat_initial
 JOIN public.demande d            ON d.id_demande = mv.id_demande
 JOIN public.demande_acquereur da ON da.id_demande = d.id_demande AND da.qualite = 'principal'
 JOIN public.v_honoraires vh      ON vh.id_acte = a.id_acte
+-- Conversion en HT selon la base du mandat (D19) : honoraires TTC -> / (1 + TVA) ; HT -> inchangés.
+CROSS JOIN LATERAL (SELECT CASE WHEN mv.base_honoraires = 'TTC' THEN round(vh.honoraires_total / (1 + mv.taux_tva / 100), 2)
+                                ELSE vh.honoraires_total END AS ht) h
 LEFT JOIN public.compromis co        ON co.id_compromis = a.id_compromis
 LEFT JOIN public.offre_acquisition o ON o.id_offre = co.id_offre
 LEFT JOIN public.proposition p       ON p.id_proposition = o.id_proposition
@@ -216,7 +233,9 @@ LEFT JOIN public.bien b              ON b.id_bien = p.id_bien
 LEFT JOIN public.remuneration_chasseur rc ON rc.id_acte = a.id_acte AND rc.date_annulation IS NULL
 ON CONFLICT (id_acte) DO UPDATE SET
     id_date_acte = EXCLUDED.id_date_acte, id_chasseur = EXCLUDED.id_chasseur, id_gestionnaire = EXCLUDED.id_gestionnaire,
-    id_zone = EXCLUDED.id_zone, id_client = EXCLUDED.id_client, id_bien = EXCLUDED.id_bien,
+    id_zone = EXCLUDED.id_zone, id_zone_recherche = EXCLUDED.id_zone_recherche, id_client = EXCLUDED.id_client, id_bien = EXCLUDED.id_bien,
+    honoraires_agence_brut = EXCLUDED.honoraires_agence_brut, base_honoraires_mandat = EXCLUDED.base_honoraires_mandat,
+    taux_tva_mandat = EXCLUDED.taux_tva_mandat,
     id_mandat_en_vigueur = EXCLUDED.id_mandat_en_vigueur, id_mandat_initial = EXCLUDED.id_mandat_initial,
     est_hors_dispositif = EXCLUDED.est_hors_dispositif, source_information = EXCLUDED.source_information,
     est_mandat_exclusif = EXCLUDED.est_mandat_exclusif, montant_acte_net_vendeur = EXCLUDED.montant_acte_net_vendeur,

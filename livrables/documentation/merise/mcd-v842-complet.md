@@ -1,8 +1,14 @@
-# MCD complet — v8.42 (généré)
+# MCD complet — v8.42 (vue de contrôle générée depuis le DDL)
 
 > ⚙️ **Schémas et tableaux GÉNÉRÉS depuis `livrables/db/01_ddl.sql`** par `sources/generer_mcd.py` : les cardinalités sont
 > déduites des clés (NOT NULL, UNIQUE, clés étrangères) et ne peuvent pas dériver du schéma réel. La section
 > « Justifications » est rédigée à la main (`sources/mcd-justifications.md`).
+
+> **Statut méthodologique.** En Merise, le MCD précède le MLD et le MPD : les MCD de **conception** sont ceux de
+> l'atelier de convergence d'août 2026 (Confluence, « MCD - Mermaid Code #01 ») et du dossier de modélisation (§3).
+> Ce document est une **rétro-ingénierie du schéma réel** : il sert de vue de contrôle à jour, pour vérifier que
+> le modèle implémenté est bien celui qui a été conçu, et pour retrouver chaque choix débattu. Il ne remplace pas
+> la démarche de conception, il la vérifie.
 
 **28 entités, 3 sous-types, 7 associations n,m, 46 associations binaires, 7 contraintes d'intégrité fonctionnelle.** Lecture Merise : une entité porte son identifiant (souligné) et ses attributs ;
 les clés étrangères du MLD n'apparaissent pas comme attributs, elles sont les associations.
