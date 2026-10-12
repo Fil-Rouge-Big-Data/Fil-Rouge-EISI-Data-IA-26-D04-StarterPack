@@ -164,6 +164,8 @@ CREATE TRIGGER tg_acte_compromis_realise
 -- l. 45-50 (acte après l'échéance d'un mandat NON renouvelé -> droit fermé) et §4 des règles
 -- de calcul (« sauf renouvellement du mandat »).
 
+-- COST 10000 sur les trois fonctions : chaque appel exécute une CTE récursive ; sans ce coût déclaré, le
+-- planificateur les évaluait AVANT les filtres d'égalité des vues (6 000 actes x 100 mandats, > 3 min).
 -- Tous les mandats de la chaîne à laquelle appartient p_mandat (initial et renouvellements).
 CREATE OR REPLACE FUNCTION f_chaine_mandats(p_mandat uuid) RETURNS SETOF uuid AS $$
     WITH RECURSIVE amont AS (            -- remonte jusqu'au mandat initial
@@ -176,7 +178,7 @@ CREATE OR REPLACE FUNCTION f_chaine_mandats(p_mandat uuid) RETURNS SETOF uuid AS
         SELECT m.id_mandat FROM mandat m JOIN aval v ON m.id_mandat_precedent = v.id_mandat
     )
     SELECT id_mandat FROM aval;
-$$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE COST 10000 ROWS 2;   -- ROWS 2 : sans cette estimation (1 000 par défaut), parcours complets au lieu des index
 
 -- Le mandat INITIAL de la chaîne : point de départ du délai de performance S1 (D13).
 CREATE OR REPLACE FUNCTION f_mandat_initial_chaine(p_mandat uuid) RETURNS uuid AS $$
@@ -186,20 +188,45 @@ CREATE OR REPLACE FUNCTION f_mandat_initial_chaine(p_mandat uuid) RETURNS uuid A
         SELECT m.id_mandat, m.id_mandat_precedent FROM mandat m JOIN amont a ON m.id_mandat = a.id_mandat_precedent
     )
     SELECT id_mandat FROM amont WHERE id_mandat_precedent IS NULL;
-$$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE COST 10000;
 
 -- Le mandat de la chaîne EN VIGUEUR à la date p_date, ou NULL (droit fermé).
 -- Le jour où un renouvellement prend effet, c'est lui qui est retenu (date_debut la plus récente).
 CREATE OR REPLACE FUNCTION f_mandat_en_vigueur_chaine(p_mandat uuid, p_date date) RETURNS uuid AS $$
     SELECT m.id_mandat
-    FROM mandat m
-    WHERE m.id_mandat IN (SELECT f_chaine_mandats(p_mandat))
-      AND p_date >= m.date_debut
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN mandat m ON m.id_mandat = ch
+    WHERE p_date >= m.date_debut
       AND p_date <= (m.date_debut + INTERVAL '6 months')::date
       AND (m.date_resiliation IS NULL OR p_date <= m.date_resiliation)
     ORDER BY m.date_debut DESC
     LIMIT 1;
-$$ LANGUAGE sql STABLE;
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- Les actes rattachés à une chaîne de mandats, par leurs deux origines, EN PARTANT DES INDEX (acte.id_mandat,
+-- proposition.id_mandat) : c'est l'inverse de v_acte_mandat, qui part de l'acte. Sert aux vues d'état.
+CREATE OR REPLACE FUNCTION f_actes_chaine(p_mandat uuid)
+RETURNS TABLE (id_acte uuid, id_mandat_origine uuid, date_signature date) AS $$
+    SELECT a.id_acte, a.id_mandat, a.date_signature
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN acte a ON a.id_mandat = ch
+    UNION ALL
+    SELECT a.id_acte, p.id_mandat, a.date_signature
+    FROM f_chaine_mandats(p_mandat) ch
+    JOIN proposition p       ON p.id_mandat = ch
+    JOIN offre_acquisition o ON o.id_proposition = p.id_proposition
+    JOIN compromis co        ON co.id_offre = o.id_offre
+    JOIN acte a              ON a.id_compromis = co.id_compromis;
+$$ LANGUAGE sql STABLE COST 10000;
+
+-- Vrai si un acte de la chaîne rémunère CE mandat (= mandat en vigueur à la date de l'acte). Corps de
+-- fonction = barrière d'optimisation : les actes candidats sont trouvés par index AVANT l'appel coûteux
+-- à f_mandat_en_vigueur_chaine (sans cela, une sous-requête corrélée dans v_mandat l'évaluait pour chaque
+-- acte et chaque mandat : > 3 min sur 20 000 mandats, mesure de la note d'indexation).
+CREATE OR REPLACE FUNCTION f_mandat_clos_par_acte(p_mandat uuid) RETURNS boolean AS $$
+    SELECT EXISTS (SELECT 1 FROM f_actes_chaine(p_mandat) x
+                   WHERE f_mandat_en_vigueur_chaine(x.id_mandat_origine, x.date_signature) = p_mandat);
+$$ LANGUAGE sql STABLE COST 10000;
 
 -- S24 : un acte hors dispositif (sans compromis) référence le mandat EN VIGUEUR de sa chaîne à la
 -- date de l'acte, et ce mandat est EXCLUSIF (Readme l. 75, US 00 et 10). Sous mandat non exclusif,
@@ -333,7 +360,8 @@ SELECT m.*,
        -- ADR-053 / D13 : l'acte (chaîne de vente ou hors dispositif) est rattaché au mandat de la
        -- chaîne EN VIGUEUR à sa date (v_acte_mandat) : le mandat initial d'une chaîne renouvelée
        -- est « renouvelé », le renouvellement qui aboutit est « clos en succès ».
-       EXISTS (SELECT 1 FROM v_acte_mandat am WHERE am.id_mandat_en_vigueur = m.id_mandat) AS a_acte,
+       -- f_mandat_clos_par_acte : actes de la chaîne trouvés par index, puis mandat en vigueur (ADR-053 / D13)
+       f_mandat_clos_par_acte(m.id_mandat) AS a_acte,
        EXISTS (SELECT 1 FROM mandat s WHERE s.id_mandat_precedent = m.id_mandat) AS a_successeur,
        -- statut officiel : ADR-048 « repris fait foi ». Si un état repris existe
        -- (fait historique non recalculable, flux de rachats), il prime ; sinon on
@@ -343,7 +371,7 @@ SELECT m.*,
           WHERE mr.id_mandat = m.id_mandat),
          CASE
            WHEN m.date_resiliation IS NOT NULL THEN 'resilie'
-           WHEN EXISTS (SELECT 1 FROM v_acte_mandat am WHERE am.id_mandat_en_vigueur = m.id_mandat) THEN 'clos_succes'  -- ADR-053 / D13
+           WHEN f_mandat_clos_par_acte(m.id_mandat) THEN 'clos_succes'  -- ADR-053 / D13
            WHEN EXISTS (SELECT 1 FROM mandat s WHERE s.id_mandat_precedent = m.id_mandat) THEN 'renouvele'
            WHEN (m.date_debut + INTERVAL '6 months')::date >= date_reference() THEN 'actif'
            ELSE 'echu'
@@ -374,8 +402,7 @@ SELECT d.*,
        CASE
          WHEN d.date_sans_suite IS NOT NULL THEN 'sans_suite'
          -- ADR-053 / D13 : la demande est close dès qu'un acte rémunère un mandat de la demande
-         WHEN EXISTS (SELECT 1 FROM v_acte_mandat am JOIN mandat mm ON mm.id_mandat = am.id_mandat_en_vigueur
-                      WHERE mm.id_demande = d.id_demande) THEN 'close'
+         WHEN EXISTS (SELECT 1 FROM mandat mo WHERE mo.id_demande = d.id_demande AND f_mandat_clos_par_acte(mo.id_mandat)) THEN 'close'
          WHEN d.id_mandat_courant IS NOT NULL THEN 'en_recherche'
          WHEN d.date_qualification IS NOT NULL THEN 'qualifie'
          WHEN d.date_affectation IS NOT NULL THEN 'affecte'

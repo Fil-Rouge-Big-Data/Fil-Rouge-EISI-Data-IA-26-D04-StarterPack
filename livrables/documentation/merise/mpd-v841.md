@@ -82,7 +82,7 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 - `tg_remuneration_mandat_acte` — la rémunération porte sur le mandat de la chaîne en vigueur à la date de l'acte (S25) ; droit fermé si aucun (S26).
 - `tg_mandat_reverification`, `tg_acte_reverification` — déclencheurs de contrainte **différés au commit** : une modification du mandat (exclusivité, dates, résiliation, filiation) ou de l'acte (mandat, compromis, date) est re-contrôlée par les mêmes fonctions, pour qu'un contournement après coup soit impossible.
 
-**Fonctions de chaîne (D13) :** `f_chaine_mandats` (initial + renouvellements), `f_mandat_en_vigueur_chaine` (mandat en vigueur à une date), `f_mandat_initial_chaine` (point de départ du délai S₁).
+**Fonctions de chaîne (D13) :** `f_chaine_mandats` (initial + renouvellements ; `ROWS 2` pour que le planificateur choisisse les index), `f_mandat_en_vigueur_chaine` (mandat en vigueur à une date), `f_mandat_initial_chaine` (point de départ du délai S₁), `f_actes_chaine` (actes d'une chaîne trouvés par index) et `f_mandat_clos_par_acte` (vrai si un acte rémunère ce mandat), utilisées par `v_mandat` et `v_demande`. Coût mesuré (note d'indexation) : 1,7 ms par mandat, `v_mandat` complète sur 20 000 mandats en 12,6 s.
 - `tg_commentaire_prive` — un client ne peut pas poster de commentaire privé (RG-01).
 - `tg_observation_periode` — observation dans une période close.
 

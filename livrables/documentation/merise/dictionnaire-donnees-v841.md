@@ -487,7 +487,7 @@ d'un indicateur sur une période. `objectif` : cible d'un indicateur.
 
 | Vue | Ce qu'elle calcule |
 |---|---|
-| `v_mandat` | `date_fin`, `est_expire`, `a_acte`, `a_successeur` et `statut_calcule` ∈ actif / echu / clos_succes / renouvele / resilie. **Un état repris (`mandat_reprise`) fait foi** sur le calcul. L'acte est cherché par ses deux origines : chaîne de vente ou hors dispositif (ADR-053). |
+| `v_mandat` | `date_fin`, `est_expire`, `a_acte`, `a_successeur` et `statut_calcule` ∈ actif / echu / clos_succes / renouvele / resilie. **Un état repris (`mandat_reprise`) fait foi** sur le calcul. L'acte est cherché par ses deux origines : chaîne de vente ou hors dispositif, via `f_mandat_clos_par_acte` (ADR-053). |
 | `v_mandat_actif` | Les mandats dont `statut_calcule` vaut `actif`. |
 | `v_demande` | `statut_calcule` du cycle de la demande ∈ en_recherche / qualifie / affecte / close / sans_suite (flag stocké : `date_sans_suite` + motif). « close » : le mandat courant a un acte, quelle que soit son origine (ADR-053). |
 | `v_compromis` | `statut_calcule` ∈ signe / realise / caduc (caduc = flag stocké `date_caducite` + motif ; réalisé = il existe un acte). |
