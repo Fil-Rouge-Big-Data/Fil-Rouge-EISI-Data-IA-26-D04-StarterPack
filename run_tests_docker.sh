@@ -53,6 +53,7 @@ PSQL_DOCKER_CONTAINER="$CONTAINER" PGUSER="$USER" PGDATABASE="$DB" \
 echo
 echo "Cohérence de la documentation avec le schéma..."
 "$PY" livrables/db/verifier_dictionnaire.py
+"$PY" livrables/documentation/merise/sources/generer_mld.py --verifier
 
 echo
 echo "Sondes (anti-régression intégrité)..."
@@ -63,3 +64,12 @@ echo
 echo "Tests d'anonymisation RGPD..."
 REQUIRE_DB=1 DST_PGHOST="$HOTE" DST_PGPORT="$PORT" DST_PGUSER="$USER" DST_PGDATABASE="$DB" DST_PGPASSWORD="${POSTGRES_PASSWORD:-}" \
   "$PY" -m pytest livrables/jobs/anonymisation -q
+
+echo
+echo "Entrepot decisionnel (schema olap) : etoile, alimentation, vues, tests..."
+# Reconstruit de zero a chaque recette : l'entrepot se recharge entierement depuis l'OLTP (ETL idempotent).
+docker exec -i "$CONTAINER" psql -U "$USER" -d "$DB" -q -c "DROP SCHEMA IF EXISTS olap CASCADE;"
+for f in 01_schema_etoile 02_etl_chargement 03_vues_kpi; do
+  docker exec -i "$CONTAINER" psql -U "$USER" -d "$DB" -q -v ON_ERROR_STOP=1     < "livrables/olap/${f}.sql"
+done
+REQUIRE_DB=1 PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" PGPASSWORD="$POSTGRES_PASSWORD"   "$PY" -m pytest livrables/olap/tests -q

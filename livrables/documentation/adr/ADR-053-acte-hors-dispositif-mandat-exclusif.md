@@ -118,8 +118,8 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
   - **MCD/MLD (images)** : cardinalité acte–compromis 1,1 → 0,1 côté acte ; nouvelle association
     acte–mandat (0,1 / 0,1). Le diagramme Mermaid du dossier de modélisation est à jour ; les images PNG
     restent à régénérer.
-  - **Entrepôt OLAP** : l'alimentation de `fait_vente` lira `v_acte_mandat` ; bien et zone
-    seront nuls pour une vente hors dispositif, `est_hors_dispositif` la distinguera.
+  - **Entrepôt OLAP** : fait (dossier OLAP v1.1, `livrables/olap/`) : `fait_vente` lit `v_acte_mandat` ; bien et zone
+    sont nuls pour une vente hors dispositif, `est_hors_dispositif` la distingue.
 - **Point ouvert** : le notaire de l'acte hors dispositif n'est pas enregistré (il l'est sur le compromis
   pour la chaîne normale). Le justificatif reçu se joint en `document`.
 - **D13 — chaîne de renouvellement (mis en œuvre, réponse du PO simulée le 11/10, à confirmer).** L'exemple

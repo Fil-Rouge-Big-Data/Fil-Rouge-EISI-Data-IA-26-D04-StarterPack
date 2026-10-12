@@ -52,6 +52,8 @@ rétribution après concrétisation.
 
 ## 3. MCD conceptuel — les entités et leurs liens
 
+> **MCD complet (notation Merise, cardinalités déduites du DDL) :** [mcd-v842-complet.md](mcd-v842-complet.md) — vue d'ensemble, un schéma détaillé par domaine, tableaux des entités, associations, cardinalités et CIF, justifications des choix débattus. Le diagramme ci-dessous est la vue conceptuelle simplifiée.
+
 ```mermaid
 erDiagram
     UTILISATEUR ||--o| CLIENT : "est un"
@@ -111,6 +113,8 @@ sous mandat exclusif, dont l'acte se rattache directement au mandat (ADR-053).
 ---
 
 ## 4. MLD relationnel complet (38 tables)
+
+> **MLD textuel (schéma relationnel, règles de passage, normalisation 1FN/2FN/3FN/FNBC et dénormalisations justifiées) :** [mld-v842-relationnel.md](mld-v842-relationnel.md), généré depuis le DDL et contrôlé par `generer_mld.py --verifier` dans la recette.
 
 Diagramme généré depuis les **clés étrangères du schéma réel** (une flèche = une clé étrangère, du parent
 vers l'enfant). Le détail colonne par colonne est dans `dictionnaire-colonnes-v841.md` :

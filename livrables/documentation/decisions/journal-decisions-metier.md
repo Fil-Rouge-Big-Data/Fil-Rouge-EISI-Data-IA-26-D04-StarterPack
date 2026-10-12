@@ -24,6 +24,8 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | D15 | Pas d'offre sans note d'avis ; la note suit une visite de reconnaissance | actée, simulée : modifiée (dérogation possible) | API (phase 4) |
 | D16 | Achat hors dispositif saisi par le gestionnaire, avec source, date et justificatif ; alerte à 30 jours | actée, simulée : confirmée | v8.42 (colonnes de traçabilité), OLAP (alerte) |
 | D17 | Hors périmètre : partage d'honoraires, visite accompagnée obligatoire, rendez-vous à trois | actée, simulée : confirmée | aucun (phase 4 si besoin) |
+| D18 | Une chaîne de mandats aboutit à **au plus un acte** (un seul achat par recherche) | **posée à l'équipe** (revue PR #14, point B) | v8.42 : garde S24 et trigger de l'acte classique, PR suivante |
+| D19 | Honoraires et marge de l'entrepôt en **HT** ; l'assiette OLTP reste celle de l'énoncé (fixe + %), dans la base du mandat | **posée au PO** (revue PR #15, point 2) | ETL : conversion selon `base_honoraires` et `taux_tva` |
 
 ---
 
@@ -92,6 +94,20 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 - **Réponse simulée du PO.** « On ne partage pas, l'acheteur nous paie. L'accompagnement, c'est au chasseur de voir. L'agenda, plus tard. »
 
 ---
+
+## D18 — Un seul acte par chaîne de mandats (question posée à l'équipe)
+
+- **Problème (revue de la PR #14, Angeline Gomez).** `UNIQUE (acte.id_mandat)` n'empêche que deux actes hors dispositif : un mandat qui a déjà un acte classique (via proposition) accepte encore un acte hors dispositif, donc deux rémunérations.
+- **Décision proposée.** Un mandat de recherche porte sur **un** achat : une chaîne de mandats aboutit à au plus un acte, quelle que soit son origine. Garde à ajouter dans S24 (acte hors dispositif) et dans le trigger de l'acte sur compromis.
+- **Alternative écartée.** Autoriser plusieurs actes (achat de deux biens sous un même mandat) : pas dans l'énoncé, et les cinq critères du barème sont définis pour une vente par mandat.
+- **Effet.** v8.42, PR suivante (avec les points A, C et D de la même revue).
+
+## D19 — Honoraires HT ou TTC dans l'entrepôt (question posée au PO)
+
+- **Problème (revue de la PR #15, Angeline Gomez).** L'entrepôt étiquetait « HT » des honoraires calculés dans la base du mandat (TTC à 20 % sur le jeu de test) : 9 300 € affichés pour 7 750 € HT réels, marge et taux de marge faux.
+- **Décision proposée.** L'OLTP garde l'assiette de l'énoncé (fixe + % du prix) dans la base du mandat ; l'entrepôt conserve ce brut et le **convertit en HT** selon `base_honoraires` et `taux_tva` ; chiffre d'affaires, marge et taux de marge sont en HT. La rémunération gelée est réputée HT (le chasseur indépendant facture l'agence).
+- **Question au PO.** L'assiette de la rémunération du chasseur est-elle le brut de l'énoncé ou les honoraires HT ? L'énoncé ne parle pas de TVA. Tant que ce n'est pas tranché, l'OLTP ne change pas.
+- **Effet.** ETL et vues de l'entrepôt (PR #15), dossier OLAP §2.
 
 ## Décision de GO sur l'étude d'opportunité (pour information)
 
