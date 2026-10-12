@@ -72,6 +72,11 @@ Mise en œuvre (v8.42) :
 4 ter. **Résiliation refusée après un acte** (S27, revue de la PR #14 point A) : `tg_mandat_resiliation_apres_acte`
    refuse toute résiliation d'un mandat qui a abouti (`f_mandat_clos_par_acte`). Sans cela, une résiliation posée
    après l'acte faisait passer le mandat en « résilié » dans `v_mandat`, la résiliation y étant testée avant le succès.
+4 quater. **Rémunération seulement après encaissement** (S28, D20) : `tg_remuneration_encaissement` refuse une
+   rémunération tant que `acte.honoraires_encaisses` est faux, et `tg_acte_encaissement_remunere` refuse d'annuler
+   l'encaissement d'un acte déjà rémunéré. La règle « l'encaissement par l'entreprise est le fait générateur de la
+   rémunération » (B2/US07) était écrite dans le DDL mais portée par aucune contrainte : en cas de litige client
+   (contestation des honoraires, décision judiciaire attendue), rien n'empêchait de payer le chasseur avant l'issue.
 5. **Traçabilité** : `acte.source_information` (`client`, `notaire`, `autre`) et
    `acte.date_connaissance` (date à laquelle l'agence a appris la vente, distincte de la date de l'acte),
    obligatoires pour, et seulement pour, l'acte hors dispositif (`ck_acte_trace_hors_dispositif`).
@@ -193,6 +198,8 @@ la base ne porte pas d'unicité sur `(id_proposition, date_visite)`, ce qui inte
 | T33 | acte hors dispositif sur le mandat initial alors qu'un renouvellement est en vigueur | trigger S24 |
 | T34 | acte hors dispositif redaté après l'échéance de sa chaîne | trigger S24 |
 | T35 | résiliation d'un mandat qui a déjà abouti à un acte | trigger S27 |
+| T36 | rémunération alors que les honoraires de l'acte ne sont pas encaissés (D20) | trigger S28 |
+| T37 | encaissement annulé sur un acte déjà rémunéré (D20) | trigger S28 |
 
 Depuis la v8.43, le harnais exige le **code** de la garde (`trigger:S24`…) dans le message de rejet : un rejet par
 un autre trigger ne fait plus passer le test (revue PR #14, point C).

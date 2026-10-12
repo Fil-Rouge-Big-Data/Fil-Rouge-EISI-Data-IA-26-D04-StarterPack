@@ -81,6 +81,8 @@ ATTENDU = {
     # ADR-053 / D13 (v8.42) : chaîne de renouvellement et re-vérification après coup
     "T31": "trigger:S26",           "T32": "trigger:S24",             "T33": "trigger:S24",
     "T34": "trigger:S24",           "T35": "trigger:S27",
+    # D20 (v8.43) : l'encaissement des honoraires est le fait générateur de la rémunération
+    "T36": "trigger:S28",           "T37": "trigger:S28",
 }
 
 # ADR-053 : renouvellement du mandat du seed (filiation, début = fin du précédent), exclusif ou non.
@@ -96,8 +98,8 @@ def _renouvellement(id_mandat, exclusif):
 # ADR-053 : renouvellement exclusif f8 (début 2025-12-05) + acte hors dispositif + rémunération,
 # jeu de départ partagé par P8 (valide) et par les tests de re-vérification après coup (T32, T34).
 _HORS_DISPOSITIF_F8 = (
-    "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
-    "('ac700000-0000-0000-0000-000000000008','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance,honoraires_encaisses,date_encaissement) VALUES "
+    "('ac700000-0000-0000-0000-000000000008','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10',true,'2026-03-20'); "
     "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
     "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
     "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000008','11111111-0000-0000-0000-000000000001',"
@@ -203,6 +205,17 @@ REJETS = [
   + "UPDATE acte SET date_signature='2026-07-01' WHERE id_acte='ac700000-0000-0000-0000-000000000008';"),
  ("T35 S27 résiliation d'un mandat qui a déjà abouti à un acte (revue PR #14, point A)",
   "UPDATE mandat SET date_resiliation='2025-09-01', type_resiliation='abandon_client' WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
+ # D20 : pas de rémunération tant que l'entreprise n'a pas encaissé (litige client, contestation).
+ ("T36 D20 rémunération alors que les honoraires de l'acte ne sont pas encaissés (S28)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('ac700000-0000-0000-0000-000000000009','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
+    "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
+    "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000009','11111111-0000-0000-0000-000000000001',"
+    "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001');"),
+ ("T37 D20 encaissement annulé sur un acte déjà rémunéré (S28)",
+  "UPDATE acte SET honoraires_encaisses=false WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
  ("T30 ADR-053 acte hors dispositif sans source ni date de connaissance",
   "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe) VALUES ('88888888-0000-0000-0000-000000000001','2025-09-15',300000,9000);"),
  ("T20 C18 client poste commentaire privé",

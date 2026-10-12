@@ -350,6 +350,37 @@ CREATE TRIGGER tg_mandat_resiliation_apres_acte
     BEFORE INSERT OR UPDATE OF date_resiliation, type_resiliation ON mandat
     FOR EACH ROW EXECUTE FUNCTION f_mandat_resiliation_apres_acte();
 
+-- S28 / D20 : la rémunération du chasseur n'existe qu'après l'encaissement des honoraires par
+-- l'entreprise (B2/US07 : l'encaissement est le fait générateur de la rémunération). Tant qu'un
+-- litige client bloque l'encaissement (contestation, décision judiciaire attendue), rien ne doit
+-- permettre de payer le chasseur. La règle était écrite (01_ddl.sql, ADR-049) mais portée par
+-- aucune contrainte : la base acceptait une rémunération sur un acte non encaissé.
+CREATE OR REPLACE FUNCTION f_remuneration_encaissement() RETURNS trigger AS $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM acte a WHERE a.id_acte = NEW.id_acte AND a.honoraires_encaisses) THEN
+        RAISE EXCEPTION 'S28 : rémunération refusée, les honoraires de l''acte % ne sont pas encaissés', NEW.id_acte;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_remuneration_encaissement
+    BEFORE INSERT OR UPDATE OF id_acte ON remuneration_chasseur
+    FOR EACH ROW EXECUTE FUNCTION f_remuneration_encaissement();
+
+-- S28 (volet symétrique) : on n'annule pas l'encaissement d'un acte déjà rémunéré.
+CREATE OR REPLACE FUNCTION f_acte_encaissement_remunere() RETURNS trigger AS $$
+BEGIN
+    IF NOT NEW.honoraires_encaisses
+       AND EXISTS (SELECT 1 FROM remuneration_chasseur rc WHERE rc.id_acte = NEW.id_acte) THEN
+        RAISE EXCEPTION 'S28 : annulation d''encaissement refusée, l''acte % porte déjà une rémunération', NEW.id_acte;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_acte_encaissement_remunere
+    BEFORE UPDATE OF honoraires_encaisses ON acte
+    FOR EACH ROW EXECUTE FUNCTION f_acte_encaissement_remunere();
+
 -- ADR-053 / D13 : pour chaque acte, le mandat d'ORIGINE (chaîne de vente ou hors dispositif),
 -- le mandat EN VIGUEUR de sa chaîne à la date de l'acte (celui que rémunère remuneration_chasseur)
 -- et le mandat INITIAL (point de départ du délai S1). Sert aux vues d'état et à l'entrepôt.

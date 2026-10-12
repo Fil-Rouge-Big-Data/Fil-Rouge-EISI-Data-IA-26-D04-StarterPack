@@ -150,8 +150,8 @@ non recalculable qui fait foi dans `v_mandat`. Le cache d'état calculé n'exist
 Vérifié sur PostgreSQL 16.15 (code visant PostgreSQL 18 : le `uuidv7()` natif n'a pas été essayé, le repli
 l'a été) :
 - DDL rejouable : **38 tables, 9 vues, 340 colonnes**.
-- Harnais de contraintes : **35 rejets, chacun par la contrainte ou le trigger attendu (code vérifié)**, + 6 écritures valides
-  (v8.42 : T24 à T34, P8 et P9 — achat hors dispositif, chaîne de renouvellement, re-vérification après coup ; v8.43 : T35, résiliation après acte).
+- Harnais de contraintes : **37 rejets, chacun par la contrainte ou le trigger attendu (code vérifié)**, + 6 écritures valides
+  (v8.42 : T24 à T34, P8 et P9 — achat hors dispositif, chaîne de renouvellement, re-vérification après coup ; v8.43 : T35 à T37, résiliation après acte et rémunération seulement après encaissement — S27, S28/D20).
 - Batterie de **sondes** : 12 fermées, 0 ouverte (hermétiques : mêmes résultats quel que soit l'état de la base).
 - Migration : 153 lignes, 73 anomalies tracées ; 48 tests ; dérivation des états prouvée (le même mandat
   change d'état selon la date de référence).
