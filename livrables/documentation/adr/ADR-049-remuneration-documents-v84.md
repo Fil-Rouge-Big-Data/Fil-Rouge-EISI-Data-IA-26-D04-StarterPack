@@ -107,38 +107,14 @@ BC01 (décisions tracées), BC03 (intégrité SGBD, gel juridique), BC05 (donné
 par date : deux personnes (le chasseur et le client, un couple d'acquéreurs) peuvent visiter le même
 bien le même jour et produire chacune une ligne.
 
-**Convention retenue.** En base, une visite est un **fait par participant** : chaque personne présente
-produit une ligne. Pour le score, en revanche, l'unité est le **rendez-vous** (révision v8.42) :
+**Convention initiale (v8.41).** Une visite est un **fait par participant** : chaque personne présente
+produit une ligne. Le score de visites (`score_visites`, pondération 25) comptait les lignes de visite des
+clients sur les propositions du mandat, sur les 12 mois glissants précédant l'acte.
 
-| Qui est présent | Rendez-vous | Compte dans `score_visites` ? |
-| --- | --- | --- |
-| Chasseur seul (reconnaissance) | 1 | **Non** : travail préparatoire, il porte la note d'avis |
-| Chasseur + 1 acquéreur | 1 | Oui |
-| Chasseur + couple d'acquéreurs | 1 | Oui (et non 2) |
-| Acquéreur(s) seul(s), avec le vendeur ou son agent | 1 | Oui |
-
-Le score de visites du chasseur (`score_visites`, pondération 25) se calcule en comptant les
-**rendez-vous réalisés** où au moins un **acquéreur de la demande** est présent, sur les propositions du
-mandat, sur les 12 mois glissants précédant l'acte :
-
-```sql
-SELECT count(DISTINCT (v.id_proposition, v.date_visite))
-FROM visite v
-JOIN proposition p        ON p.id_proposition = v.id_proposition
-JOIN demande_acquereur da ON da.id_demande = p.id_demande
-                         AND da.id_client = v.id_visiteur
-WHERE p.id_mandat = :id_mandat
-  AND v.realisee = true
-  AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
-```
-
-- `count(DISTINCT …)` : un couple produit deux lignes pour un seul rendez-vous ; un `count(*)` le
-  compterait deux fois (5 visites en couple → 10 → note ≈ 47 au lieu de 80).
-- `demande_acquereur` plutôt qu'un test sur `client` : un chasseur peut aussi être client (cumul) ; il
-  ne doit pas être compté comme acquéreur de la demande sur laquelle il travaille.
-- Limite : `date_visite` n'a pas d'heure ; deux rendez-vous sur le même bien le même jour comptent pour un.
-- Vente hors dispositif : même requête (visites réelles sur les propositions du mandat) ; note neutre de
-  50 si elle renvoie 0 (§2.3).
+**Révisée en v8.42 — voir l'ADR-053 §5 bis.** La revue de la PR #15 a montré qu'un `count(*)` comptait double
+une visite en couple ; le comptage se fait désormais par **rendez-vous** d'acquéreurs de la demande. Le statut
+« Accepté » de cet ADR vaut pour le principe (fait par participant, pas d'unicité en base) ; la règle de
+comptage en vigueur est celle de l'ADR-053.
 
 Ce comptage est une **règle OLAP** (ou du moteur de calcul de la rémunération), pas une contrainte
 d'intégrité. La base ne porte pas de `UNIQUE` sur `(id_proposition, date_visite)` : cela interdirait

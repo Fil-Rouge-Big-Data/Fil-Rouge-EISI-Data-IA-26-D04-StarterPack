@@ -69,6 +69,9 @@ Mise en œuvre (v8.42) :
    'vente_externe'))` — sous mandat exclusif, l'achat ailleurs n'est pas une fin anticipée. Sans cette
    contrainte, un mandat payé apparaîtrait « résilié » : dans `v_mandat`, la résiliation est testée
    avant le succès.
+4 ter. **Résiliation refusée après un acte** (S27, revue de la PR #14 point A) : `tg_mandat_resiliation_apres_acte`
+   refuse toute résiliation d'un mandat qui a abouti (`f_mandat_clos_par_acte`). Sans cela, une résiliation posée
+   après l'acte faisait passer le mandat en « résilié » dans `v_mandat`, la résiliation y étant testée avant le succès.
 5. **Traçabilité** : `acte.source_information` (`client`, `notaire`, `autre`) et
    `acte.date_connaissance` (date à laquelle l'agence a appris la vente, distincte de la date de l'acte),
    obligatoires pour, et seulement pour, l'acte hors dispositif (`ck_acte_trace_hors_dispositif`).
@@ -109,6 +112,47 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
 (5 799,60 € à 6 339,60 €). L'entrepôt analytique exclut ces actes de l'indice d'efficacité des visites
 (KPI-3). La convention est une **décision de l'équipe (D12)**, présentée au Product Owner.
 
+## 5 bis. Comptage des visites — révision de l'ADR-049 §5 (D10)
+
+Portée ici à la demande de la revue (PR #14, point D) : l'ADR-049 reste « Accepté » pour le principe, la règle de
+comptage en vigueur est celle-ci.
+
+**Convention.** En base, une visite est un **fait par participant** : chaque personne présente
+produit une ligne. Pour le score, en revanche, l'unité est le **rendez-vous** (D10) :
+
+| Qui est présent | Rendez-vous | Compte dans `score_visites` ? |
+| --- | --- | --- |
+| Chasseur seul (reconnaissance) | 1 | **Non** : travail préparatoire, il porte la note d'avis |
+| Chasseur + 1 acquéreur | 1 | Oui |
+| Chasseur + couple d'acquéreurs | 1 | Oui (et non 2) |
+| Acquéreur(s) seul(s), avec le vendeur ou son agent | 1 | Oui |
+
+Le score de visites du chasseur (`score_visites`, pondération 25) se calcule en comptant les
+**rendez-vous réalisés** où au moins un **acquéreur de la demande** est présent, sur les propositions du
+mandat, sur les 12 mois glissants précédant l'acte :
+
+```sql
+SELECT count(DISTINCT (v.id_proposition, v.date_visite))
+FROM visite v
+JOIN proposition p        ON p.id_proposition = v.id_proposition
+JOIN demande_acquereur da ON da.id_demande = p.id_demande
+                         AND da.id_client = v.id_visiteur
+WHERE p.id_mandat = :id_mandat
+  AND v.realisee = true
+  AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
+```
+
+- `count(DISTINCT …)` : un couple produit deux lignes pour un seul rendez-vous ; un `count(*)` le
+  compterait deux fois (5 visites en couple → 10 → note ≈ 47 au lieu de 80).
+- `demande_acquereur` plutôt qu'un test sur `client` : un chasseur peut aussi être client (cumul) ; il
+  ne doit pas être compté comme acquéreur de la demande sur laquelle il travaille.
+- Limite : `date_visite` n'a pas d'heure ; deux rendez-vous sur le même bien le même jour comptent pour un.
+- Vente hors dispositif : même requête (visites réelles sur les propositions du mandat) ; note neutre de
+  50 si elle renvoie 0 (§2.3).
+
+Ce comptage est une règle du moteur de calcul (OLAP, `olap.f_nb_visites`), pas une contrainte d'intégrité :
+la base ne porte pas d'unicité sur `(id_proposition, date_visite)`, ce qui interdirait les visites à plusieurs.
+
 ## 6. Conséquences
 
 - **Positives** : conformité à l'énoncé sur les deux types de mandat ; aucune proposition fictive ; la garde
@@ -122,6 +166,10 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
     sont nuls pour une vente hors dispositif, `est_hors_dispositif` la distingue.
 - **Point ouvert** : le notaire de l'acte hors dispositif n'est pas enregistré (il l'est sur le compromis
   pour la chaîne normale). Le justificatif reçu se joint en `document`.
+- **Point ouvert, D18 (revue de la PR #14, point B)** : un mandat qui a un acte classique accepte encore un acte
+  hors dispositif (`UNIQUE (acte.id_mandat)` ne couvre que les actes hors dispositif). Proposition : une chaîne de
+  mandats aboutit à au plus un acte, garde à ajouter dans S24 et dans le trigger de l'acte sur compromis. En
+  attente de la décision de l'équipe.
 - **D13 — chaîne de renouvellement (mis en œuvre, réponse du PO simulée le 11/10, à confirmer).** L'exemple
   de bout en bout du `.feature` 10 (Bruno) date l'acte après l'échéance du mandat initial et calcule pourtant une
   rémunération, alors que la ligne 46 ferme le droit pour un mandat **non renouvelé** ; le §4 des règles de calcul
@@ -144,6 +192,10 @@ Sur l'exemple de Bruno (`.feature` 10), l'écart entre les deux lectures extrêm
 | T32 | mandat exclusif rendu non exclusif après un acte hors dispositif (re-vérification différée) | trigger S24 |
 | T33 | acte hors dispositif sur le mandat initial alors qu'un renouvellement est en vigueur | trigger S24 |
 | T34 | acte hors dispositif redaté après l'échéance de sa chaîne | trigger S24 |
+| T35 | résiliation d'un mandat qui a déjà abouti à un acte | trigger S27 |
+
+Depuis la v8.43, le harnais exige le **code** de la garde (`trigger:S24`…) dans le message de rejet : un rejet par
+un autre trigger ne fait plus passer le test (revue PR #14, point C).
 | P8 (valide) | achat hors dispositif sous mandat exclusif : acte + rémunération acceptés, mandat dérivé `clos_succes` | — |
 | P9 (valide) | cas de Bruno (D13) : vente après l'échéance du mandat initial, sous renouvellement ; rémunération sur le renouvellement ; initial « renouvelé », renouvellement « clos en succès » ; `id_mandat_initial` = mandat initial | — |
 

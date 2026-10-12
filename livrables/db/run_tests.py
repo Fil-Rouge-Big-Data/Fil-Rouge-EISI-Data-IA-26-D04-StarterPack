@@ -63,6 +63,8 @@ def _nom_contrainte(msg):
 # pour la BONNE raison. Un rejet par une autre contrainte (jeu de données qui bute plus tôt, FK
 # antérieure...) est un FAUX POSITIF : le test ne prouve alors rien sur la règle visée.
 # "trigger" = règle portée par un trigger (RAISE EXCEPTION, SQLSTATE P0001), sans nom de contrainte.
+# "trigger:S24" = rejet par un trigger métier DONT le message porte ce code (revue PR #14 : « trigger » seul
+# acceptait n'importe quel trigger, le test ne prouvait pas que la bonne garde avait joué).
 ATTENDU = {
     "T1": "ck_commentaire_cible",   "T2": "trigger",                  "T3": "uk_proposition_active",
     "T4": "fk_mandat_signataire",   "T5": "ux_affectation_ouverte",   "T6": "ck_mandat_remun",
@@ -73,12 +75,12 @@ ATTENDU = {
     "T19": "ck_visite_annulation",  "T20": "trigger",                 "T21": "fk_proposition_mandat",
     "T22": "ck_chasseur_habilitation", "T23": "trigger",
     # ADR-053 (v8.42) : acte hors dispositif sous mandat exclusif
-    "T24": "ck_acte_origine",       "T25": "ck_acte_origine",         "T26": "trigger",
-    "T27": "trigger",               "T28": "trigger",                 "T29": "ck_mandat_vente_externe",
+    "T24": "ck_acte_origine",       "T25": "ck_acte_origine",         "T26": "trigger:S24",
+    "T27": "trigger:S24",           "T28": "trigger:S25",             "T29": "ck_mandat_vente_externe",
     "T30": "ck_acte_trace_hors_dispositif",
     # ADR-053 / D13 (v8.42) : chaîne de renouvellement et re-vérification après coup
-    "T31": "trigger",               "T32": "trigger",                 "T33": "trigger",
-    "T34": "trigger",
+    "T31": "trigger:S26",           "T32": "trigger:S24",             "T33": "trigger:S24",
+    "T34": "trigger:S24",           "T35": "trigger:S27",
 }
 
 # ADR-053 : renouvellement du mandat du seed (filiation, début = fin du précédent), exclusif ou non.
@@ -111,6 +113,10 @@ def verdict_rejet(identifiant, msg):
         return False, f"aucune contrainte attendue déclarée pour {identifiant}"
     if attendue == "trigger":
         return (sqlstate == "P0001"), ("trigger" if sqlstate == "P0001" else f"{sqlstate}/{nom} au lieu d'un trigger")
+    if attendue.startswith("trigger:"):          # un trigger PRÉCIS : son code (S24, S25...) doit être dans le message
+        code = attendue.split(":", 1)[1]
+        ok = sqlstate == "P0001" and re.search(rf"\b{code}\b", msg) is not None
+        return ok, (attendue if ok else f"{sqlstate}/{nom or 'trigger'} sans le code {code}")
     return (nom == attendue), (nom if nom == attendue else f"{nom} AU LIEU DE {attendue}")
 
 REJETS = [
@@ -181,7 +187,9 @@ REJETS = [
   _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
   + "UPDATE remuneration_chasseur SET id_mandat='88888888-0000-0000-0000-0000000000f8' WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
  ("T29 ADR-053 résiliation 'vente_externe' d'un mandat exclusif",
-  "UPDATE mandat SET date_resiliation='2025-09-01', type_resiliation='vente_externe' WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
+  # sur un renouvellement SANS acte : le mandat du seed a un acte, S27 (v8.43) le refuserait avant la contrainte visée
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "UPDATE mandat SET date_resiliation='2026-01-10', type_resiliation='vente_externe' WHERE id_mandat='88888888-0000-0000-0000-0000000000f8';"),
  ("T31 D13 rémunération maintenue alors que l'acte est redaté après l'échéance d'un mandat non renouvelé (S26, re-vérification différée)",
   "UPDATE acte SET date_signature='2026-01-10' WHERE id_acte='ac700000-0000-0000-0000-000000000001'; SET CONSTRAINTS ALL IMMEDIATE;"),
  ("T32 D13 mandat exclusif rendu non exclusif après un acte hors dispositif (S24, re-vérification différée)",
@@ -193,6 +201,8 @@ REJETS = [
  ("T34 D13 acte hors dispositif redaté après l'échéance de sa chaîne (S24)",
   _renouvellement("88888888-0000-0000-0000-0000000000f8", True) + _HORS_DISPOSITIF_F8
   + "UPDATE acte SET date_signature='2026-07-01' WHERE id_acte='ac700000-0000-0000-0000-000000000008';"),
+ ("T35 S27 résiliation d'un mandat qui a déjà abouti à un acte (revue PR #14, point A)",
+  "UPDATE mandat SET date_resiliation='2025-09-01', type_resiliation='abandon_client' WHERE id_mandat='88888888-0000-0000-0000-000000000001';"),
  ("T30 ADR-053 acte hors dispositif sans source ni date de connaissance",
   "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe) VALUES ('88888888-0000-0000-0000-000000000001','2025-09-15',300000,9000);"),
  ("T20 C18 client poste commentaire privé",

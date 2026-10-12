@@ -1,6 +1,7 @@
 -- ============================================================
--- 02_index.sql — Index proposés après mesure (note d'indexation). Chacun est justifié par UNE requête
--- de 03_requetes.sql ; principe d'éco-conception ENF-26 : pas d'index sans requête qui le demande.
+-- 02_index.sql — Index justifiés par la mesure (note d'indexation). Depuis la v8.43 ils font partie de
+-- 01_ddl.sql ; ce fichier sert au script de mesure, qui les retire puis les recrée pour comparer
+-- « avant » et « après ». Principe d'éco-conception ENF-26 : pas d'index sans requête qui le demande.
 -- PostgreSQL n'indexe PAS automatiquement les clés étrangères : seules les clés primaires et les
 -- unicités le sont. Les jointures « parent -> enfants » (mandat -> propositions, proposition -> visites,
 -- chasseur -> mandats / rémunérations) partent donc d'un parcours séquentiel sans ces index.

@@ -109,7 +109,7 @@ Sorties attendues :
 | Script | Attendu |
 |---|---|
 | `run_migration_docker.sh` | `[OK] source=historique lignes=153 anomalies=73`, `Validation OK`, `48 passed` |
-| `run_tests_docker.sh` | `REJETS : 34/34 correctement rejetés`, `VALIDES : 6/6 correctement acceptés` |
+| `run_tests_docker.sh` | `REJETS : 35/35 correctement rejetés`, `VALIDES : 6/6 correctement acceptés` |
 
 > ⚠️ **Les deux scripts remettent le schéma de `chasse_v8` à zéro** (`DROP SCHEMA public CASCADE`
 > puis rechargement) avant de s'exécuter : ils peuvent donc être lancés **dans n'importe quel

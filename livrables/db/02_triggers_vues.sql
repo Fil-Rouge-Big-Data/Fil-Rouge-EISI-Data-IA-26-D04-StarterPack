@@ -335,6 +335,21 @@ CREATE CONSTRAINT TRIGGER tg_acte_reverification
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION f_reverifier_apres_acte();
 
+-- S27 (revue de la PR #14, point A) : on ne résilie pas un mandat qui a abouti. Sans cette garde, une
+-- résiliation posée APRÈS l'acte faisait passer le mandat en « résilié » dans v_mandat (la résiliation y
+-- est testée avant le succès) alors que le chasseur a été payé. Cause traitée, pas le symptôme.
+CREATE OR REPLACE FUNCTION f_mandat_resiliation_apres_acte() RETURNS trigger AS $$
+BEGIN
+    IF NEW.date_resiliation IS NOT NULL AND f_mandat_clos_par_acte(NEW.id_mandat) THEN
+        RAISE EXCEPTION 'S27 : résiliation refusée, le mandat % a déjà abouti à un acte', NEW.id_mandat;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_mandat_resiliation_apres_acte
+    BEFORE INSERT OR UPDATE OF date_resiliation, type_resiliation ON mandat
+    FOR EACH ROW EXECUTE FUNCTION f_mandat_resiliation_apres_acte();
+
 -- ADR-053 / D13 : pour chaque acte, le mandat d'ORIGINE (chaîne de vente ou hors dispositif),
 -- le mandat EN VIGUEUR de sa chaîne à la date de l'acte (celui que rémunère remuneration_chasseur)
 -- et le mandat INITIAL (point de départ du délai S1). Sert aux vues d'état et à l'entrepôt.
