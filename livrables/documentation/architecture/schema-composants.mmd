@@ -1,0 +1,20 @@
+flowchart LR
+    LEG["SI hérité<br/>+ agences rachetées"] -- "reprise multi-source" --> P
+    W["Site web<br/>espace acquéreur"] --> API
+    L["Logiciel métier<br/>chasseurs"] --> API
+    ING["Ingestion<br/>d'annonces"] --> API
+    API["Backend / API REST<br/>phase 4"] --> P[("OLTP primaire<br/>PostgreSQL<br/>socle v8.42")]
+    API --> OBJ[("Stockage objet S3<br/>médias")]
+    P -- "réplication" --> R[("Réplique<br/>lecture seule")]
+    P -- "sauvegardes" --> B[("Sauvegardes<br/>hors site UE")]
+    R --> MATCH["Matching<br/>quotidien"]
+    R --> AF["Airflow<br/>nocturne"]
+    AF --> DW[("Entrepôt OLAP")]
+    DW --> BI["Tableaux de bord"]
+    P --> V["Vue<br/>pseudonymisée"] -.-> IA["Services IA<br/>phase 4"]
+    classDef fait fill:#E3FCEF,stroke:#006644,color:#172b4d
+    classDef maquette fill:#FFFAE6,stroke:#FF991F,color:#172b4d
+    classDef cible fill:#F4F5F7,stroke:#6B778C,color:#172b4d,stroke-dasharray:4 4
+    class P,DW fait
+    class OBJ maquette
+    class API,R,B,MATCH,AF,BI,V,IA,W,L,ING cible
