@@ -129,7 +129,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | --- | --- | --- |
 | Remplacer les réponses simulées par les réponses réelles | Matthieu | après le point du 12/10 |
 | Mettre en œuvre D13 (gardes S24 et S26) et la traçabilité D16 dans la v8.42 | Matthieu (PR #14) | avant le merge |
-| Implémenter D10 et D12 dans l'alimentation OLAP, avec tests | Matthieu | phase 3 |
+| ~~Implémenter D10 et D12 dans l'alimentation OLAP, avec tests~~ | Matthieu | **fait** — PR #15 (fonction `olap.f_nb_visites`, ventes hors dispositif exclues de KPI-3), mergée le 12/10 |
 | Reporter D15 (dérogation tracée) dans le contrat d'API | équipe | phase 4 |
 | Synthèse de l'étude d'opportunité en 2 pages | Matthieu | semaine du 12/10 |
 | Alerte « vente conclue sans visite » dans l'entrepôt (complément D12, proposé par Matthieu le 13/10) | Matthieu | phase 3 |
