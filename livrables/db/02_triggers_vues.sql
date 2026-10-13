@@ -351,13 +351,22 @@ CREATE TRIGGER tg_mandat_resiliation_apres_acte
     FOR EACH ROW EXECUTE FUNCTION f_mandat_resiliation_apres_acte();
 
 -- S28 / D20 : la rémunération du chasseur n'existe qu'après l'encaissement des honoraires par
--- l'entreprise (B2/US07 : l'encaissement est le fait générateur de la rémunération). Tant qu'un
+-- l'entreprise. Source : Readme, parcours du chasseur, étape 10 (« une fois que l'entreprise reçoit
+-- les honoraires, le chasseur est prévenu du paiement proche de sa rémunération »). Tant qu'un
 -- litige client bloque l'encaissement (contestation, décision judiciaire attendue), rien ne doit
 -- permettre de payer le chasseur. La règle était écrite (01_ddl.sql, ADR-049) mais portée par
 -- aucune contrainte : la base acceptait une rémunération sur un acte non encaissé.
+-- Concurrence (revue de la PR #16, Angeline Gomez, point A) : la ligne de l'acte est VERROUILLÉE
+-- (FOR SHARE) pendant la vérification. Sans ce verrou, une transaction qui décoche l'encaissement
+-- en même temps ne voit pas la rémunération pas encore validée, et les deux passent (course
+-- reproduite le 13/10). Avec le verrou, la transaction concurrente attend la fin de celle-ci,
+-- puis voit la rémunération et est refusée par le volet symétrique ci-dessous. Le verrou posé par
+-- la clé étrangère (FOR KEY SHARE) ne suffit pas : il ne bloque pas la mise à jour d'une colonne
+-- non clé comme honoraires_encaisses.
 CREATE OR REPLACE FUNCTION f_remuneration_encaissement() RETURNS trigger AS $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM acte a WHERE a.id_acte = NEW.id_acte AND a.honoraires_encaisses) THEN
+    PERFORM 1 FROM acte a WHERE a.id_acte = NEW.id_acte AND a.honoraires_encaisses FOR SHARE;
+    IF NOT FOUND THEN
         RAISE EXCEPTION 'S28 : rémunération refusée, les honoraires de l''acte % ne sont pas encaissés', NEW.id_acte;
     END IF;
     RETURN NEW;

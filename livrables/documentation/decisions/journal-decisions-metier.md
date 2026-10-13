@@ -26,7 +26,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | D17 | Hors périmètre : partage d'honoraires, visite accompagnée obligatoire, rendez-vous à trois | actée, simulée : confirmée | aucun (phase 4 si besoin) |
 | D18 | Une chaîne de mandats aboutit à **au plus un acte** (un seul achat par recherche) | **posée à l'équipe** (revue PR #14, point B) | v8.42 : garde S24 et trigger de l'acte classique, PR suivante |
 | D19 | Honoraires et marge de l'entrepôt en **HT** ; l'assiette OLTP reste celle de l'énoncé (fixe + %), dans la base du mandat | **posée au PO** (revue PR #15, point 2) | ETL : conversion selon `base_honoraires` et `taux_tva` |
-| D20 | Rémunération du chasseur **seulement après encaissement** des honoraires par l'entreprise (litige = pas de paiement) | actée (règle B2/US07, jusqu'ici non contrainte) | v8.43 : garde S28, tests T36-T37 |
+| D20 | Rémunération du chasseur **seulement après encaissement** des honoraires par l'entreprise (litige = pas de paiement) | actée (règle du Readme, parcours du chasseur, étape 10, jusqu'ici non contrainte) | v8.43 : garde S28, tests T36-T37 |
 
 ---
 
@@ -113,10 +113,10 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 
 ## D20 — Rémunération du chasseur seulement après encaissement (12/10)
 
-- **Problème (question de Matthieu).** Si le client conteste les honoraires d'un achat hors dispositif (enquête, décision judiciaire), la direction ne veut pas qu'une facturation du chasseur soit possible avant l'issue. La règle écrite (B2/US07 : l'encaissement des honoraires par l'entreprise est le fait générateur de la rémunération) n'était portée par **aucune contrainte** : la base acceptait une rémunération sur un acte non encaissé.
+- **Problème (question de Matthieu).** Si le client conteste les honoraires d'un achat hors dispositif (enquête, décision judiciaire), la direction ne veut pas qu'une facturation du chasseur soit possible avant l'issue. La règle écrite (Readme, parcours du chasseur, étape 10 : l'entreprise reçoit les honoraires, puis le chasseur est prévenu du paiement de sa rémunération) n'était portée par **aucune contrainte** : la base acceptait une rémunération sur un acte non encaissé.
 - **Décision.** Garde S28 : une rémunération n'est acceptée que si les honoraires de l'acte sont encaissés ; annuler l'encaissement d'un acte déjà rémunéré est refusé. Tant que le litige dure, l'entreprise n'encaisse pas, donc ne rémunère pas. Enregistrer la vente et tracer sa source restent possibles dès la connaissance du fait : c'est la mémoire du dossier, pas un paiement.
 - **Question au PO (non bloquante).** Faut-il un état « contesté / en litige » visible sur l'acte, pour que la direction voie ces dossiers dans l'entrepôt ?
-- **Effet.** v8.43 (PR #16) : triggers S28 (`tg_remuneration_encaissement`, `tg_acte_encaissement_remunere`), tests T36 et T37, ADR-053 item 4 quater.
+- **Effet.** v8.43 (PR #16) : triggers S28 (`tg_remuneration_encaissement`, `tg_acte_encaissement_remunere`), tests T36 et T37, ADR-053 item 4 quater. Verrou de l'acte pendant la vérification et test de concurrence à deux sessions (revue d'Angeline Gomez, 13/10).
 
 ## Décision de GO sur l'étude d'opportunité (pour information)
 

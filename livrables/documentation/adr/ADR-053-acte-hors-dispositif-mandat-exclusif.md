@@ -75,8 +75,12 @@ Mise en œuvre (v8.42) :
 4 quater. **Rémunération seulement après encaissement** (S28, D20) : `tg_remuneration_encaissement` refuse une
    rémunération tant que `acte.honoraires_encaisses` est faux, et `tg_acte_encaissement_remunere` refuse d'annuler
    l'encaissement d'un acte déjà rémunéré. La règle « l'encaissement par l'entreprise est le fait générateur de la
-   rémunération » (B2/US07) était écrite dans le DDL mais portée par aucune contrainte : en cas de litige client
+   rémunération » (Readme, parcours du chasseur, étape 10) était écrite dans le DDL mais portée par aucune contrainte : en cas de litige client
    (contestation des honoraires, décision judiciaire attendue), rien n'empêchait de payer le chasseur avant l'issue.
+   **Concurrence** (revue de la PR #16, point A) : la vérification verrouille la ligne de l'acte (`FOR SHARE`). Sans ce
+   verrou, une rémunération et une annulation d'encaissement lancées en même temps passaient toutes deux (course
+   reproduite le 13/10) ; le verrou de la clé étrangère (`FOR KEY SHARE`) ne bloque pas la mise à jour d'une colonne
+   non clé. Test rejouable dans les deux ordres : `livrables/db/concurrence/test_s28_concurrence.sh`, intégré à la recette.
 5. **Traçabilité** : `acte.source_information` (`client`, `notaire`, `autre`) et
    `acte.date_connaissance` (date à laquelle l'agence a appris la vente, distincte de la date de l'acte),
    obligatoires pour, et seulement pour, l'acte hors dispositif (`ck_acte_trace_hors_dispositif`).

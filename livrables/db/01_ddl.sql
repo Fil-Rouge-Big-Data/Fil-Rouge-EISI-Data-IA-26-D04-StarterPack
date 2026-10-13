@@ -582,7 +582,7 @@ CREATE TABLE acte (
     montant_vente   d_montant NOT NULL CHECK (montant_vente > 0),
     honoraires_fixe d_montant,
     honoraires_taux d_taux,
-    -- B2/US07 : encaissement des honoraires par l'entreprise. C'est le fait
+    -- Readme, parcours du chasseur, étape 10 (et B2/US07) : encaissement des honoraires par l'entreprise. C'est le fait
     -- générateur de la rémunération du chasseur (« quand ce paiement est enregistré »)
     -- et, pour une vente, de la concrétisation du parrainage (règlement art. 9).
     honoraires_encaisses   boolean NOT NULL DEFAULT false,
