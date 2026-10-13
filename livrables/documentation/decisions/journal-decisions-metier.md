@@ -53,6 +53,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 - **Alternatives écartées.** Note 0 : sanction maximale (comme 18 visites) ; « 0 visite » convertie = 100 : bonus pour un ciblage non fait. Écart entre les deux : 540 € sur l'exemple de Bruno (5 799,60 € contre 6 339,60 €).
 - **Effet.** ADR-049 §2.3 et ADR-053 §5 ; règle du moteur de calcul (OLAP / applicatif), hors schéma. Ces actes sont exclus du KPI-3.
 - **Réponse simulée du PO.** « Ni bonus ni malus pour un bien que le chasseur n'a pas trouvé : 50, ça me va. Mais si le client a visité dix biens avec lui avant, on les compte. »
+- **Complément (13/10/2026, Matthieu Barre).** (1) La note de 50 est maintenue et argumentée : une vente à 0 visite est presque toujours un achat hors dispositif où le client a trouvé seul ; noter 100 récompenserait au maximum un ciblage qui n'a pas été fait (aléa moral), noter 0 punirait injustement. (2) **Nouvelle proposition** : une vente à 0 visite déclenche une **alerte direction** au tableau de bord (signal d'un client qui a court-circuité un chasseur inactif, ou d'une anomalie de process : offre sans visite). Distincte de l'alerte D16 (mandat exclusif sans visite depuis 30 jours, qui surveille le mandat EN COURS) : celle-ci audite la vente CONCLUE. Mise en œuvre : vue d'alerte dans l'entrepôt (fait_vente porte déjà nb_visites), phase 3.
 
 ## D13 — Mandat renouvelé : droit et délai (question posée au PO)
 
@@ -131,3 +132,4 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | Implémenter D10 et D12 dans l'alimentation OLAP, avec tests | Matthieu | phase 3 |
 | Reporter D15 (dérogation tracée) dans le contrat d'API | équipe | phase 4 |
 | Synthèse de l'étude d'opportunité en 2 pages | Matthieu | semaine du 12/10 |
+| Alerte « vente conclue sans visite » dans l'entrepôt (complément D12, proposé par Matthieu le 13/10) | Matthieu | phase 3 |
