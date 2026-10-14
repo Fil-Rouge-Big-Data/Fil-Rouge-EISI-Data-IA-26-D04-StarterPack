@@ -7,7 +7,7 @@
 
 ## 1. Le problème
 
-« Chasse Immo » (6 chasseurs indépendants, 18 mandats actifs repris) travaille sur un SI hérité qui ne tient plus : **55 % des mandats sont juridiquement contestables** (échéance Hoguet non suivie), la chaîne de valeur (bien, visite, offre, compromis, acte, honoraires) n'est **pas modélisée**, les critères de recherche sont du texte libre écrasé, les données personnelles sont en clair sans purge, et le backend est une **boîte noire sans mainteneur** (anomalie A11). La direction pilote à l'aveugle : aucun des cinq indicateurs demandés (entonnoir, délais et trésorerie, efficacité des visites, rentabilité et rémunération, performance sectorielle) n'existe.
+« Chasse Immo » (6 chasseurs indépendants, 18 mandats repris dont 11 actifs) travaille sur un SI hérité qui ne tient plus : **6 des 11 mandats actifs (55 %) ont dépassé l'échéance contractuelle de 6 mois fixée par l'énoncé** et sont contestables, la chaîne de valeur (bien, visite, offre, compromis, acte, honoraires) n'est **pas modélisée**, les critères de recherche sont du texte libre écrasé, les données personnelles sont en clair sans purge, et le backend est une **boîte noire sans mainteneur** (anomalie A11). La direction pilote à l'aveugle : aucun des cinq indicateurs demandés (entonnoir, délais et trésorerie, efficacité des visites, rentabilité et rémunération, performance sectorielle) n'existe.
 
 **Coût de l'inaction : 151 400 € par an** — 45 000 € d'honoraires perdus (3 ventes contestées), 86 400 € de temps de prospection manuelle (6 chasseurs × 4 h/jour × 180 jours × 20 €/h), 20 000 € de provision pour risque CNIL. Hypothèses explicites, à mesurer.
 
@@ -19,9 +19,9 @@ Trois architectures comparées sur six critères pondérés (volumétrie 5, expl
 |---|---|---|---|
 | A — base unique indexée | tout sur une instance | 66 | écartée : contention entre saisie terrain et reporting, aucun espace pour l'IA |
 | **B — OLTP + OLAP séparés** | socle transactionnel normalisé + entrepôt en étoile | **85** | **retenue** : couvre 3 à 5 ans, exploitable par une PME |
-| C — sharding géographique | base distribuée par pays | 80 | ajournée (phase 3+) : exploitation 24/7 hors de portée, matching IA dégradé |
+| C — sharding géographique | base distribuée par pays | 80 | ajournée (phase 3+) : exploitation 24/7 hors de portée, matching IA à réorganiser (non mesuré) ; ni prototypée ni chiffrée, ordre de grandeur en annexe §5.4 |
 
-Le classement ne bascule vers C que si l'international pèse 5 **et** l'exploitation 3 : c'est la situation visée en phase 3 avancée, d'où un report, pas un abandon. Le registre des risques (annexe §5.4) ramène les 9 risques de B en zone verte après traitement, dont la non-adoption de l'outil par les chasseurs, traitée par un pilote (annexe §7.5) ; C en garde 3 élevés (exploitation distribuée, intégrité non distribuable, compétences rares).
+Le classement bascule vers C si le poids de l'exploitation descend à 2, ou si l'international pèse 5 avec une exploitation à 3 : dans les deux cas, il faut une capacité d'exploitation distribuée, visée en phase 3 avancée, d'où un report, pas un abandon. Le registre des risques (annexe §5.4) donne à chacun des 9 risques de B un traitement et un niveau résiduel visé, encore à atteindre, dont la non-adoption de l'outil par les chasseurs, traitée par un pilote (annexe §7.5) ; C en garde 3 élevés (exploitation distribuée, intégrité non distribuable, compétences rares).
 
 ## 3. Le coût et le retour
 
@@ -32,9 +32,11 @@ Le classement ne bascule vers C que si l'international pèse 5 **et** l'exploita
 | Coût total an 1 | **65 469 €** | |
 | Coût total 3 ans | **93 790 €** | OPEX ≈ 12 à 16 k€/an, montée en gamme de la base en an 3 |
 | Gains estimés par an | **115 200 €** | **gains d'exploitation 70 200** : productivité des chasseurs 43 200 (2 h/jour libérées, à mesurer pendant le pilote) + pilotage du barème 27 000 · **risque évité 45 000** : honoraires sécurisés (3 ventes contestées, non mesurées) |
-| **ROI an 1 / 3 ans** | **76 % / 268,5 %** | point mort **6,8 mois** |
+| **ROI an 1 / 3 ans** | **76 % / 268,5 %** | temps de retour estimé **6,8 mois d'exploitation** (≈ 12 mois après le GO avec une montée progressive des gains) |
 
 **Solidité :** les gains d'exploitation couvrent seuls le coût de l'année 1 (ROI an 1 de +7,2 % sans le risque évité) ; le projet est remboursé dans l'année dès que **56,8 %** des gains se réalisent ; avec des gains divisés par deux, l'an 1 est déficitaire (−12 %) mais le ROI sur 3 ans reste **+84 %**. Réalisé par une ESN (530 à 730 €/j), le ROI an 1 tombe entre +26 % et −4 %, le ROI 3 ans reste positif. Seul le cumul des trois pires hypothèses (ESN au tarif haut, OPEX doublé, gains divisés par deux) rend le projet déficitaire sur 3 ans (−8,4 %) : c'est la limite de validité du business case.
+
+**Périmètre chiffré :** la plateforme de données (socle, migration, entrepôt, contrat d'API, pré-matching). Le backend applicatif complet (API, authentification, droits, interfaces) n'est pas dans les 65 469 € : fourchette indicative de 60 à 90 j.h (21 à 32 k€), estimation par tâches à produire avant le GO. Les gains de productivité sont un gain de capacité d'indépendants, converti en ventes sous hypothèse ; les 27 000 € de pilotage sont une hypothèse non calculée (annexe §6.2).
 
 **Mode de réalisation :** équipe interne avec au moins un ingénieur data recruté pour l'exploitation (traite le risque de perte de compétences, RB8, réplique du scénario A11) ; prestataire réservé aux expertises ponctuelles (audit de sécurité budgété), avec clause de transfert de compétences. L'option « tout apprentis » (21 081 €) est la moins chère mais exige un encadrement interne qui n'existe pas.
 
@@ -56,4 +58,4 @@ Décisions métier prises en équipe et présentées au Product Owner : journal 
 
 ---
 
-*Annexe : étude complète, mise à jour v3.1 (contexte, coût de l'inaction détaillé, SWOT, grille de notation, registre des risques, TCO, sources des prix, trajectoire de trésorerie, exploitation et continuité, planning et jalons, conduite du changement, annexe pédagogique Q1 à Q13).*
+*Annexe : étude complète, mise à jour v3.2 (contexte, coût de l'inaction détaillé, SWOT, grille de notation, registre des risques, TCO, sources des prix, trajectoire de trésorerie, exploitation et continuité, planning et jalons, conduite du changement, annexe pédagogique Q1 à Q13).*
