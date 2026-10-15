@@ -72,6 +72,12 @@ Mise en œuvre (v8.42) :
 4 ter. **Résiliation refusée après un acte** (S27, revue de la PR #14 point A) : `tg_mandat_resiliation_apres_acte`
    refuse toute résiliation d'un mandat qui a abouti (`f_mandat_clos_par_acte`). Sans cela, une résiliation posée
    après l'acte faisait passer le mandat en « résilié » dans `v_mandat`, la résiliation y étant testée avant le succès.
+   **Sens inverse** (revue de la PR #16, Thérèse Nguyen, point 1) : la garde ne jouait que sur l'écriture du mandat.
+   Résiliation saisie d'abord, puis acte appris après coup et daté d'avant : S24 l'acceptait, la rémunération suivait,
+   et le mandat payé restait « résilié ». `tg_acte_mandat_resilie` refuse désormais tout acte dont le mandat en vigueur
+   à sa date est résilié, pour les deux origines de l'acte et sur la chaîne de renouvellement (T38, T39) ; l'agence
+   annule d'abord la résiliation, puis saisit l'acte. La ligne du mandat est verrouillée (`FOR SHARE`) pendant la
+   vérification : une résiliation concurrente attend, puis est refusée par S27 (test de concurrence, deux ordres).
 4 quater. **Rémunération seulement après encaissement** (S28, D20) : `tg_remuneration_encaissement` refuse une
    rémunération tant que `acte.honoraires_encaisses` est faux, et `tg_acte_encaissement_remunere` refuse d'annuler
    l'encaissement d'un acte déjà rémunéré. La règle « l'encaissement par l'entreprise est le fait générateur de la
@@ -80,7 +86,16 @@ Mise en œuvre (v8.42) :
    **Concurrence** (revue de la PR #16, point A) : la vérification verrouille la ligne de l'acte (`FOR SHARE`). Sans ce
    verrou, une rémunération et une annulation d'encaissement lancées en même temps passaient toutes deux (course
    reproduite le 13/10) ; le verrou de la clé étrangère (`FOR KEY SHARE`) ne bloque pas la mise à jour d'une colonne
-   non clé. Test rejouable dans les deux ordres : `livrables/db/concurrence/test_s28_concurrence.sh`, intégré à la recette.
+   non clé. Test rejouable dans les deux ordres : `livrables/db/concurrence/test_concurrence_s27_s28.sh`, intégré à la
+   recette. **Contrat d'isolation** (revue de la PR #16, Thérèse Nguyen, point 2) : la garantie vaut en `READ COMMITTED`,
+   le niveau par défaut, celui de la recette et de l'application ; chaque ordre d'un trigger y voit un instantané frais
+   après l'attente du verrou. En `REPEATABLE READ`, la transaction qui attend garde son instantané : elle doit échouer
+   en erreur de sérialisation et être rejouée. Ce mode n'est pas testé et ne doit pas être activé pour ces écritures.
+   **Test probant** (point 3) : le harnais vérifie que la transaction attendue réussit, que l'autre est refusée avec le
+   code de la garde, qu'elle a réellement attendu le verrou (chevauchement mesuré) et que l'état final est celui attendu.
+   **Rémunération annulée** (point 5) : une rémunération portant `date_annulation` reste une ligne ; elle continue
+   d'interdire de décocher l'encaissement. C'est voulu : l'historique prime, et une correction d'encaissement après
+   annulation passe par une correction explicite, tracée, pas par un contournement (T37, P10).
 5. **Traçabilité** : `acte.source_information` (`client`, `notaire`, `autre`) et
    `acte.date_connaissance` (date à laquelle l'agence a appris la vente, distincte de la date de l'acte),
    obligatoires pour, et seulement pour, l'acte hors dispositif (`ck_acte_trace_hors_dispositif`).

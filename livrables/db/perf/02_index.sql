@@ -22,6 +22,6 @@ CREATE INDEX IF NOT EXISTS ix_annonce_active_bien_prix ON annonce (id_bien, prix
 CREATE INDEX IF NOT EXISTS ix_proposition_mandat ON proposition (id_mandat);
 CREATE INDEX IF NOT EXISTS ix_visite_proposition_date ON visite (id_proposition, date_visite) WHERE realisee;
 CREATE INDEX IF NOT EXISTS ix_offre_proposition ON offre_acquisition (id_proposition);
-CREATE INDEX IF NOT EXISTS ix_compromis_offre ON compromis (id_offre);
+-- compromis(id_offre) est déjà indexé par sa contrainte UNIQUE : index retiré (revue PR #16, Thérèse Nguyen).
 
 ANALYZE;

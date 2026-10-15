@@ -829,6 +829,6 @@ CREATE INDEX ix_annonce_active_bien_prix ON annonce (id_bien, prix) WHERE statut
 CREATE INDEX ix_proposition_mandat ON proposition (id_mandat);
 CREATE INDEX ix_visite_proposition_date ON visite (id_proposition, date_visite) WHERE realisee;
 CREATE INDEX ix_offre_proposition ON offre_acquisition (id_proposition);
-CREATE INDEX ix_compromis_offre ON compromis (id_offre);
+-- compromis(id_offre) : pas d'index supplémentaire, la contrainte UNIQUE en crée déjà un (revue PR #16).
 
 COMMIT;

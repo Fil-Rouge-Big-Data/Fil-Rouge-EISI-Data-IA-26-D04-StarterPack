@@ -64,16 +64,17 @@ def _nom_contrainte(msg):
 # antérieure...) est un FAUX POSITIF : le test ne prouve alors rien sur la règle visée.
 # "trigger" = règle portée par un trigger (RAISE EXCEPTION, SQLSTATE P0001), sans nom de contrainte.
 # "trigger:S24" = rejet par un trigger métier DONT le message porte ce code (revue PR #14 : « trigger » seul
-# acceptait n'importe quel trigger, le test ne prouvait pas que la bonne garde avait joué).
+# acceptait n'importe quel trigger, le test ne prouvait pas que la bonne garde avait joué). Depuis la revue de la
+# PR #16, TOUS les tests de trigger portent un code (ADR-048, C9, C18, S24...) : « trigger » seul n'est plus utilisé.
 ATTENDU = {
-    "T1": "ck_commentaire_cible",   "T2": "trigger",                  "T3": "uk_proposition_active",
+    "T1": "ck_commentaire_cible",   "T2": "trigger:ADR-048",          "T3": "uk_proposition_active",
     "T4": "fk_mandat_signataire",   "T5": "ux_affectation_ouverte",   "T6": "ck_mandat_remun",
-    "T7": "ck_mandat_effet",        "T8": "ck_mandat_procur",         "T9": "trigger",
+    "T7": "ck_mandat_effet",        "T8": "ck_mandat_procur",         "T9": "trigger:C9",
     "T10": "fk_proposition_annonce","T11": "d_dpe_check",             "T12": "d_email_check",
     "T13": "ck_proposition_rejet",  "T14": "ck_demande_consent_web",  "T15": "ck_version_rendement",
     "T16": "ux_offre_acceptee",     "T17": "ck_compromis_caducite",   "T18": "ck_acte_honoraires",
-    "T19": "ck_visite_annulation",  "T20": "trigger",                 "T21": "fk_proposition_mandat",
-    "T22": "ck_chasseur_habilitation", "T23": "trigger",
+    "T19": "ck_visite_annulation",  "T20": "trigger:C18",             "T21": "fk_proposition_mandat",
+    "T22": "ck_chasseur_habilitation", "T23": "trigger:ADR-048",
     # ADR-053 (v8.42) : acte hors dispositif sous mandat exclusif
     "T24": "ck_acte_origine",       "T25": "ck_acte_origine",         "T26": "trigger:S24",
     "T27": "trigger:S24",           "T28": "trigger:S25",             "T29": "ck_mandat_vente_externe",
@@ -83,6 +84,8 @@ ATTENDU = {
     "T34": "trigger:S24",           "T35": "trigger:S27",
     # D20 (v8.43) : l'encaissement des honoraires est le fait générateur de la rémunération
     "T36": "trigger:S28",           "T37": "trigger:S28",
+    # Revue de la PR #16 (Thérèse Nguyen, 14/10) : S27 dans l'autre sens, chemin UPDATE de S28
+    "T38": "trigger:S27",           "T39": "trigger:S27",             "T40": "trigger:S28",
 }
 
 # ADR-053 : renouvellement du mandat du seed (filiation, début = fin du précédent), exclusif ou non.
@@ -117,7 +120,7 @@ def verdict_rejet(identifiant, msg):
         return (sqlstate == "P0001"), ("trigger" if sqlstate == "P0001" else f"{sqlstate}/{nom} au lieu d'un trigger")
     if attendue.startswith("trigger:"):          # un trigger PRÉCIS : son code (S24, S25...) doit être dans le message
         code = attendue.split(":", 1)[1]
-        ok = sqlstate == "P0001" and re.search(rf"\b{code}\b", msg) is not None
+        ok = sqlstate == "P0001" and re.search(rf"(?<![A-Z0-9-]){re.escape(code)}(?![A-Z0-9-])", msg) is not None
         return ok, (attendue if ok else f"{sqlstate}/{nom or 'trigger'} sans le code {code}")
     return (nom == attendue), (nom if nom == attendue else f"{nom} AU LIEU DE {attendue}")
 
@@ -216,6 +219,22 @@ REJETS = [
     "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001');"),
  ("T37 D20 encaissement annulé sur un acte déjà rémunéré (S28)",
   "UPDATE acte SET honoraires_encaisses=false WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
+ # Revue de la PR #16 (Thérèse, point 1) : S27 ne jouait que sur l'écriture du mandat.
+ ("T38 S27 résiliation saisie d'abord, puis acte hors dispositif daté d'avant (sens inverse)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "UPDATE mandat SET date_resiliation='2026-03-01', type_resiliation='abandon_client' WHERE id_mandat='88888888-0000-0000-0000-0000000000f8'; "
+    "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10');"),
+ ("T39 S27 renouvellement résilié, puis acte de la chaîne compromis redaté sous ce renouvellement (sens inverse, origine compromis)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "UPDATE mandat SET date_resiliation='2026-03-01', type_resiliation='abandon_client' WHERE id_mandat='88888888-0000-0000-0000-0000000000f8'; "
+    "UPDATE acte SET date_signature='2026-02-01' WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
+ ("T40 S28 rémunération déplacée (UPDATE id_acte) vers un acte non encaissé",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('ac700000-0000-0000-0000-000000000009','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "UPDATE remuneration_chasseur SET id_acte='ac700000-0000-0000-0000-000000000009', id_mandat='88888888-0000-0000-0000-0000000000f8' "
+    "WHERE id_acte='ac700000-0000-0000-0000-000000000001';"),
  ("T30 ADR-053 acte hors dispositif sans source ni date de connaissance",
   "INSERT INTO acte (id_mandat,date_signature,montant_vente,honoraires_fixe) VALUES ('88888888-0000-0000-0000-000000000001','2025-09-15',300000,9000);"),
  ("T20 C18 client poste commentaire privé",
@@ -254,6 +273,21 @@ VALIDES = [
     "IF (SELECT id_mandat_initial FROM v_acte_mandat WHERE id_acte='ac700000-0000-0000-0000-000000000001') <> '88888888-0000-0000-0000-000000000001' "
     "THEN RAISE EXCEPTION 'P9 : le délai S1 doit partir du mandat initial'; END IF; "
     "END $$;"),
+ # Revue de la PR #16 (Thérèse, point 4) : les corrections autorisées restent possibles, le parcours normal passe.
+ ("P10 S28 décocher l'encaissement d'un acte SANS rémunération reste possible (correction)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance,honoraires_encaisses,date_encaissement) VALUES "
+    "('ac700000-0000-0000-0000-000000000009','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10',true,'2026-03-20'); "
+    "UPDATE acte SET honoraires_encaisses=false, date_encaissement=NULL WHERE id_acte='ac700000-0000-0000-0000-000000000009';"),
+ ("P11 S28 encaissement puis rémunération dans la même transaction (parcours normal)",
+  _renouvellement("88888888-0000-0000-0000-0000000000f8", True)
+  + "INSERT INTO acte (id_acte,id_mandat,date_signature,montant_vente,honoraires_fixe,source_information,date_connaissance) VALUES "
+    "('ac700000-0000-0000-0000-000000000009','88888888-0000-0000-0000-0000000000f8','2026-02-01',300000,9000,'notaire','2026-03-10'); "
+    "UPDATE acte SET honoraires_encaisses=true, date_encaissement='2026-03-20' WHERE id_acte='ac700000-0000-0000-0000-000000000009'; "
+    "INSERT INTO remuneration_chasseur (id_acte,id_chasseur,id_mandat,honoraires,score_delai,score_exclusivite,score_ventes,"
+    "score_mandats,score_visites,score_performance,taux_base,majoration_anciennete,modulation_performance,taux_final,montant,"
+    "id_bareme_applique) VALUES ('ac700000-0000-0000-0000-000000000009','11111111-0000-0000-0000-000000000001',"
+    "'88888888-0000-0000-0000-0000000000f8',9000,80,100,85,70,50,76,45,5,1.0,47.0,4230.00,'b0000000-0000-0000-0000-000000000001');"),
 ]
 
 def savepoint_wrap(sql):

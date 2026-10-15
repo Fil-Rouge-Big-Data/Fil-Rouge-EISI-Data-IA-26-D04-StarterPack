@@ -61,8 +61,8 @@ PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" PGPASSWORD="$POSTG
   "$PY" livrables/db/run_sondes.py
 
 echo
-echo "Concurrence de la garde S28 (deux sessions simultanees)..."
-CONTAINER="$CONTAINER" DB="$DB" DBUSER="$USER" bash livrables/db/concurrence/test_s28_concurrence.sh
+echo "Concurrence des gardes S27 et S28 (deux sessions simultanees, READ COMMITTED)..."
+CONTAINER="$CONTAINER" DB="$DB" DBUSER="$USER" bash livrables/db/concurrence/test_concurrence_s27_s28.sh
 
 echo
 echo "Tests d'anonymisation RGPD..."

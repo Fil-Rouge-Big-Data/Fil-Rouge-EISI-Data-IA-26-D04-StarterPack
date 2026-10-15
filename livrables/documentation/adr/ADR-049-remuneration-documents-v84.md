@@ -19,6 +19,14 @@ score global : le gel doit être **reconstituable juridiquement** même si les r
 de calcul évoluent. Une annulation exceptionnelle est un **flag daté** + motif
 (`date_annulation`, `motif_annulation`), pas un statut (cohérent ADR-048).
 
+**Instants, depuis S28 (revue de la PR #16, Thérèse Nguyen, point 5).** Quatre dates ne doivent pas être
+confondues. La **date de référence du calcul** est la date de l'acte : barème en vigueur, notes de
+performance et ancienneté sont ceux de ce jour-là, et c'est ce que le gel conserve. La **date d'exécution**
+(`date_calcul`) peut être bien postérieure, puisque la ligne n'est insérée qu'après l'**encaissement** des
+honoraires (S28, D20) ; l'application qui calcule après encaissement doit donc reconstituer les données à la
+date de l'acte, et S28 ne vérifie pas cette reconstitution, seulement la condition d'insertion. La
+**facturation** et le **paiement** sont des événements ultérieurs, portés par `facture_chasseur`.
+
 ### 2.2 Borne de taux garantie (R2)
 `CHECK (taux_final BETWEEN 20 AND 60)` : la borne métier (US 00/07) est **garantie
 par le SGBD**, plus un simple commentaire. Ajustable par migration de contrainte si

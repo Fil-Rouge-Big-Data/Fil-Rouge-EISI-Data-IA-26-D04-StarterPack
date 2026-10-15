@@ -504,7 +504,7 @@ d'un indicateur sur une période. `objectif` : cible d'un indicateur.
 | Table | Changement |
 |---|---|
 | `mandat` | Trigger `tg_mandat_resiliation_apres_acte` (S27) : résiliation refusée si le mandat a abouti à un acte. |
-| index | Huit index justifiés par la note d'indexation ajoutés au DDL (clés étrangères et filtres stables). |
+| index | Sept index justifiés par la note d'indexation ajoutés au DDL (clés étrangères et filtres stables). |
 
 # Évolutions v8.42 (par rapport à v8.41)
 
