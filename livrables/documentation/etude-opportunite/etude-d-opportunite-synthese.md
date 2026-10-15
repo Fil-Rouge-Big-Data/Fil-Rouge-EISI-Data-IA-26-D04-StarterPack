@@ -2,7 +2,7 @@
 
 > **Titre visé :** RNCP40573, bloc **BC02** (« formaliser une étude d'opportunité ») · incidences BC01, BC05.
 > **R :** Matthieu Barre · **A :** Alexandre Kechaf · **C :** Angeline Gomez, Thérèse Nguyen, Product Owner (RACI v1.1).
-> **Version :** 3.1 du 13/10/2026 — synthèse de deux pages, étude complète en annexe. Format cible de la grille d'évaluation : 1 à 2 pages.
+> **Version :** 3.3 du 15/10/2026 — synthèse de deux pages, étude complète en annexe. Format cible de la grille d'évaluation : 1 à 2 pages.
 > **Statut :** proposé — revue de l'A reçue le 13/10 (4 sur 5, ajustements intégrés), approbation formelle attendue.
 
 ## 1. Le problème
@@ -42,7 +42,7 @@ Le classement bascule vers C si le poids de l'exploitation descend à 2, ou si l
 
 ## 4. Ce qui est déjà prouvé
 
-Le socle transactionnel de l'option B existe et passe sa recette : **v8.42** (38 tables, 9 vues), fusionnée le 12/10/2026 — 34 rejets de contraintes, 6 cas valides, 12 sondes, 48 tests de migration (52 lignes reprises, 73 anomalies journalisées), 8 tests RGPD, et l'entrepôt décisionnel (11 tests). La v8.43 (PR #16, en relecture) porte la recette à 37 rejets. Le dossier d'architecture cible (13/10) mesure les requêtes représentatives sous 65 ms sur 20 000 mandats et a testé le partitionnement. Hors périmètre chiffré : la volumétrie cible de l'énoncé (5 000 mandats par semaine), à établir par la note de dimensionnement 3V, qui conditionne la phase 3.
+Le socle transactionnel de l'option B existe et passe sa recette : **v8.43** (38 tables, 9 vues, 7 index), fusionnée le 15/10/2026 — 40 rejets de contraintes, 8 cas valides, 12 sondes, 4 scénarios de concurrence à deux sessions, 39 tests de migration (52 lignes reprises, 73 anomalies journalisées), 8 tests RGPD, et l'entrepôt décisionnel (11 tests ; 17 avec la PR #19 en relecture). Le dossier d'architecture cible (v1.2 du 15/10) mesure les requêtes représentatives sous 65 ms sur 20 000 mandats et a testé le partitionnement. Hors périmètre chiffré : la volumétrie cible de l'énoncé (5 000 mandats par semaine), à établir par la note de dimensionnement 3V, qui conditionne la phase 3.
 
 ## 5. Recommandation
 
@@ -54,8 +54,8 @@ Le socle transactionnel de l'option B existe et passe sa recette : **v8.42** (38
 
 **Calendrier :** 14 semaines, quatre jalons avec critères d'acceptation, puis un pilote d'adoption avec deux chasseurs avant généralisation (annexe §7.1 et §7.5).
 
-Décisions métier prises en équipe et présentées au Product Owner : journal des décisions D10 à D20 (trois questions lui restent posées : D13, D19, D20).
+Décisions métier prises en équipe et présentées au Product Owner : journal des décisions D10 à D20. Deux questions lui sont posées (D13, mandat renouvelé ; D19, honoraires HT ou TTC), avec des réponses simulées le 11/10 en attendant les siennes ; D20 est actée, avec une question non bloquante (état « en litige » de l'acte) ; D18 est posée à l'équipe.
 
 ---
 
-*Annexe : étude complète, mise à jour v3.2 (contexte, coût de l'inaction détaillé, SWOT, grille de notation, registre des risques, TCO, sources des prix, trajectoire de trésorerie, exploitation et continuité, planning et jalons, conduite du changement, annexe pédagogique Q1 à Q13).*
+*Annexe : étude complète, mise à jour v3.3 (contexte, coût de l'inaction détaillé, SWOT, grille de notation, registre des risques, TCO, sources des prix, trajectoire de trésorerie, exploitation et continuité, planning et jalons, conduite du changement, annexe pédagogique Q1 à Q13).*

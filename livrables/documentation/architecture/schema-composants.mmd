@@ -3,9 +3,10 @@ flowchart LR
     W["Site web<br/>espace acquéreur"] --> API
     L["Logiciel métier<br/>chasseurs"] --> API
     ING["Ingestion<br/>d'annonces"] --> API
-    API["Backend / API REST<br/>phase 4"] --> P[("OLTP primaire<br/>PostgreSQL<br/>socle v8.42")]
+    API["Backend / API REST<br/>phase 4"] --> P[("OLTP primaire<br/>PostgreSQL<br/>socle v8.43")]
     API --> OBJ[("Stockage objet S3<br/>médias")]
-    P -- "réplication" --> R[("Réplique<br/>lecture seule")]
+    P -- "réplication" --> SEC[("Instance de secours<br/>bascule automatique")]
+    P -- "réplication" --> R[("Réplique<br/>de lecture")]
     P -- "sauvegardes" --> B[("Sauvegardes<br/>hors site UE")]
     R --> MATCH["Matching<br/>quotidien"]
     R --> AF["Airflow<br/>nocturne"]
@@ -17,4 +18,4 @@ flowchart LR
     classDef cible fill:#F4F5F7,stroke:#6B778C,color:#172b4d,stroke-dasharray:4 4
     class P,DW fait
     class OBJ maquette
-    class API,R,B,MATCH,AF,BI,V,IA,W,L,ING cible
+    class API,SEC,R,B,MATCH,AF,BI,V,IA,W,L,ING cible

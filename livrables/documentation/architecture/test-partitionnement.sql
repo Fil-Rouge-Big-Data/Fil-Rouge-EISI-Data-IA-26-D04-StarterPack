@@ -18,6 +18,8 @@ CREATE FUNCTION pg_temp.borne_v7(ts timestamptz) RETURNS uuid LANGUAGE sql IMMUT
 CREATE TABLE ta_prop (LIKE proposition INCLUDING DEFAULTS INCLUDING CONSTRAINTS) PARTITION BY RANGE (id_proposition);
 \echo '--- A1. Clé primaire actuelle (id_proposition) : attendu OK'
 ALTER TABLE ta_prop ADD PRIMARY KEY (id_proposition);
+\echo '--- A1 bis. Clé étrangère entrante sur id_proposition seul (visite, offre, commentaire, note_avis) : attendu OK'
+CREATE TABLE ta_visite (id_visite uuid PRIMARY KEY, id_proposition uuid REFERENCES ta_prop (id_proposition));
 \echo '--- A2. Règle C8 (uk_proposition_active, test T3) : attendu ERREUR'
 SAVEPOINT a2;
 CREATE UNIQUE INDEX ON ta_prop (id_demande, id_bien) WHERE statut IN ('a_qualifier','soumis','retenu_visite');
