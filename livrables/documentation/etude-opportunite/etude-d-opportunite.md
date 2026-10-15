@@ -84,7 +84,7 @@ La société **« Chasse Immo »**, spécialisée dans l'intermédiation et la r
 * **Un constat de rupture avéré :** 6 des 11 mandats actifs (55 %, sur 18 mandats repris) ont dépassé l'échéance contractuelle de 6 mois fixée par l'énoncé et sont contestables, les données de recherche sont enfermées dans du texte libre inexploitable, et le backend existant est une « boîte noire » sans code source ni mainteneur (Anomalie A11).
 * **Un pilotage à l'aveugle :** La direction générale et le Product Owner ne disposent d'aucun indicateur fiable sur leur funnel d'acquisition (`Demande` → `Mandat` → `Visite` → `Offre` → `Vente` → `Honoraires`), ni sur la performance réelle de leurs 6 chasseurs.
 * **L'arbitrage stratégique :** L'analyse croisée démontre qu'un rafistolage du modèle hérité coûterait aussi cher qu'une refonte tout en pérennisant la dette technique. La faible volumétrie initiale — **52 lignes** (10 secteurs, 24 utilisateurs, 18 mandats), sur lesquelles la reprise journalise **73 anomalies** — offre une opportunité historique rare : **reconstruire intégralement le socle de données en une seule transaction de migration**, en traçant chaque anomalie.
-* **Le Business Case :** Un coût total de possession la première année de **65,5 k€** (investissement de 53,2 k€, dont 4,6 k€ de provision pour risques, + exploitation de 12,3 k€ aux prix publics d'un hébergeur français) génère des gains estimés à **115,2 k€ par an** et dégage un **retour sur investissement (ROI) de 76 % la première année, avec un temps de retour estimé à 6,8 mois d'exploitation, soit environ 12 mois après le GO avec une montée progressive des gains**, puis de **268,5 % sur 3 ans**. **Même avec des gains divisés par deux, ou réalisé par une ESN, le projet reste rentable sur 3 ans** (analyse de sensibilité, §6.3).
+* **Le Business Case :** Un coût total de possession la première année de **65,5 k€** (investissement de 53,2 k€, dont 4,6 k€ de provision pour risques, + exploitation de 12,3 k€ aux prix publics d'un hébergeur français) génère des gains estimés à **117 k€ par an** et dégage un **retour sur investissement (ROI) de 78,7 % la première année, avec un temps de retour estimé à 6,7 mois d'exploitation, soit environ 12 mois après le GO avec une montée progressive des gains**, puis de **274,2 % sur 3 ans**. **Même avec des gains divisés par deux, ou réalisé par une ESN, le projet reste rentable sur 3 ans** (analyse de sensibilité, §6.3).
 
 > **Décision soumise au Comité de Direction : AVIS « GO » AVEC RÉSERVES**  
 > Approbation du lancement de la **Phase 2 (socle relationnel cible et pipeline de migration)** selon l'**Architecture B (séparation OLTP transactionnel + OLAP décisionnel)**, retenue avec **85 points sur 115** (§5.2) — sous réserve de lever les **trois points bloquants** du cahier des charges technique v3.0 avant la remise : référence du modèle (PO-1), registre RGPD (PO-4) et règles de rémunération (PO-11). Voir §2.4 et §8.
@@ -191,24 +191,26 @@ Conserver le SI hérité ou se limiter à une maintenance palliative (« Faire a
                             │                                │
              ┌──────────────┴──────────────┐  ┌──────────────┴──────────────┐
              ▼                             ▼  ▼                             ▼
-      PERTE DE COMMISSIONS           TEMPS PERDU CHASSEURS      RISQUE JURIDIQUE & CNIL
-      Mandats nuls (Loi Hoguet)      Sourcing manuel annonces   Absence de registre/purge
-      3 ventes contestées = 45 000 € 4h/jour/chasseur = 86 400 € Amende potentielle = 20 000 €
+      PERTE DE COMMISSIONS           VENTES NON RÉALISÉES       RISQUE JURIDIQUE & CNIL
+      Mandats nuls (Loi Hoguet)      Temps terrain perdu        Absence de registre/purge
+      3 ventes contestées = 45 000 € 5 ventes perdues = 45 000 € Amende potentielle = 20 000 €
                             │                                │
                             └──────────────┬─────────────────┘
                                            ▼
                       COÛT GLOBAL ESTIMÉ DE L'INACTION :
-                               151 400 € / an
+                               110 000 € / an
 ```
 
 | Poste de perte / Risque financier | Description opérationnelle du préjudice | Perte annuelle estimée |
 |---|---|:---:|
 | **Perte de commissions (Loi Hoguet — SC04)** | 6 mandats actifs sur 11 dépassent la durée légale de 6 mois sans renouvellement. En cas de contestation notariée, la commission est légalement nulle. Sur l'hypothèse de 3 ventes contestées par an à 15 k€ d'honoraires moyens : | **45 000 €** |
-| **Gaspillage du temps de travail des Chasseurs** | 6 chasseurs passent en moyenne 4 h/jour à chercher manuellement des annonces sur les portails et à relire des fiches Word, au lieu de visiter des biens et convertir des mandats. Valorisation à 20 €/h sur 180 jours ouvrés de prospection — même base que le gain du §6.2 : 6 × 4 h × 180 j × 20 €/h = | **86 400 €** |
+| **Ventes non réalisées faute de temps terrain** | 6 chasseurs passent en moyenne 4 h/jour à chercher manuellement des annonces sur les portails et à relire des fiches Word, au lieu de visiter des biens et convertir des mandats. Ce temps est celui d'indépendants : il n'est pas une charge de l'entreprise. Son préjudice est le manque à gagner commercial : la moitié de ce temps rendue au terrain vaut environ 5 ventes par an (§6.2-2), à 15 000 € d'honoraires dont 60 % conservés par l'entreprise : 5 × 9 000 € = | **45 000 €** |
 | **Exposition aux sanctions CNIL (RGPD — SC02)** | Absence de politique de rétention, données patrimoniales intimes en clair sans consentement tracé (A10a, A10b) : provision pour risque juridique : | **20 000 €** |
-| **TOTAL DU COÛT DE L'INACTION (Année 1) :** | **Impact financier direct du maintien du statu quo (estimation sur hypothèses explicites)** | **151 400 €** |
+| **TOTAL DU COÛT DE L'INACTION (Année 1) :** | **Impact financier direct du maintien du statu quo (estimation sur hypothèses explicites)** | **110 000 €** |
 
-> **Conclusion du CoI :** Le maintien de l'existant détruit chaque mois plus de **12 600 € de valeur**, soit l'équivalent budgétaire d'une phase complète de refonte.
+*Pour mémoire, le temps de recherche manuelle valorisé à 20 €/h (6 chasseurs × 4 h × 180 jours = 86 400 €) mesurait une capacité perdue par les chasseurs, pas une perte de l'entreprise ; il n'est plus compté (revue d'Angeline Gomez, 14/10/2026).*
+
+> **Conclusion du CoI :** Le maintien de l'existant détruit chaque mois plus de **9 000 € de valeur**, soit l'équivalent budgétaire d'une phase complète de refonte.
 
 ---
 
@@ -486,9 +488,9 @@ Le coût de construction dépend directement de **qui** réalise le projet. Troi
 
 | Mode de réalisation | Coût journalier | CAPEX | TCO an 1 | ROI an 1 | ROI sur 3 ans | Démarrage | Risque de dépendance (A11) |
 |---|---|:---:|:---:|:---:|:---:|---|---|
-| **Équipe en apprentissage** (4 apprentis Bac+5) | ≈ 125 €/j brut, hors charges : 61 % du SMIC (21–25 ans, 2e année), soit 1 139 €/mois, sur 50 % du temps en entreprise ; aide de 2 000 € par contrat | 21 081 € | 33 349 € | +245 % | +460 % | À la rentrée de formation | **Très élevé** : départs en fin de contrat ; maître d'apprentissage obligatoire, alors qu'aucun informaticien n'est en poste |
-| **Recrutement interne** (scénario central) | ≈ 350 €/j : coût complet d'un junior (§6.1-1) | 53 201 € | 65 469 € | +76 % | +268,5 % | Après le délai de recrutement | **Faible** : compétences conservées dans l'entreprise |
-| **ESN ou indépendants** (data engineers) | 530 à 730 €/j, médiane 640 € ; une ESN facture en général au-dessus, marge comprise | 78 941 à 107 541 € | 91 209 à 119 809 € | de +26 % à −4 % | de +189 % à +133 % | Immédiat | **Élevé** sans clause de transfert : reproduit le schéma A11 |
+| **Équipe en apprentissage** (4 apprentis Bac+5) | ≈ 125 €/j brut, hors charges : 61 % du SMIC (21–25 ans, 2e année), soit 1 139 €/mois, sur 50 % du temps en entreprise ; aide de 2 000 € par contrat | 21 081 € | 33 349 € | +251 % | +469 % | À la rentrée de formation | **Très élevé** : départs en fin de contrat ; maître d'apprentissage obligatoire, alors qu'aucun informaticien n'est en poste |
+| **Recrutement interne** (scénario central) | ≈ 350 €/j : coût complet d'un junior (§6.1-1) | 53 201 € | 65 469 € | +78,7 % | +274,2 % | Après le délai de recrutement | **Faible** : compétences conservées dans l'entreprise |
+| **ESN ou indépendants** (data engineers) | 530 à 730 €/j, médiane 640 € ; une ESN facture en général au-dessus, marge comprise | 78 941 à 107 541 € | 91 209 à 119 809 € | de +28 % à -2 % | de +194 % à +137 % | Immédiat | **Élevé** sans clause de transfert : reproduit le schéma A11 |
 
 **Recommandation : une approche mixte.** Le scénario central valorise une **équipe interne**, condition du traitement du risque RB8 (§5.4) : au moins un ingénieur data recruté reste pour l'exploitation et peut devenir le maître d'apprentissage d'éventuels apprentis. Le recours à un prestataire est réservé à des expertises ponctuelles, comme l'audit de sécurité budgété au §6.1-2, avec une clause contractuelle de transfert de compétences. L'option « tout apprentis » est la moins chère, mais elle n'est pas recommandée : elle ne peut pas fonctionner sans encadrement interne et maximise le risque A11.
 
@@ -509,24 +511,27 @@ Ces prix évoluent : ils sont à réactualiser à la date de la remise. Les conv
 
 ### 6.2 Gains Financiers Directs & Indirects (Bénéfices Attendus)
 
-La mise en production du nouveau SI dégage des retombées économiques directes dès le premier trimestre d'exploitation, estimées à **115 200 € dès la première année** :
+La mise en production du nouveau SI dégage des retombées économiques directes dès le premier trimestre d'exploitation, estimées à **117 000 € dès la première année** :
 
 #### 1. Sécurisation du Chiffre d'Affaires (+ 45 000 € / an) — *risque évité*
 * Grâce à l'état dérivé du mandat dans la vue `v_mandat` (ADR-030, ADR-048) et à la filiation des renouvellements, l'échéance de chaque mandat est calculée et signalée : un mandat expiré ne passe plus inaperçu, et sa prolongation passe par un renouvellement tracé.
 * **Impact financier :** Les honoraires des ventes conclues sous mandat valide deviennent opposables devant le notaire instrumentaire. Sur l'hypothèse de 3 ventes par an contestables à 15 000 € de commission moyenne, l'entreprise sanctuarise un revenu de **+45 000 € / an**.
 * **Nature de ce gain : un risque évité, pas un revenu acquis.** Le nombre de 3 ventes contestées par an n'est pas mesuré : l'existant ne garde aucun historique de contestation. Ce levier est donc séparé des gains d'exploitation dans le récapitulatif (§6.2-4), et le projet reste rentable sans lui (§6.3, scénario « sans le levier 1 »). **À mesurer la première année :** mandats échus détectés par le suivi d'échéance, ventes évitées sous mandat expiré, contestations reçues.
 
-#### 2. Gain de productivité des Chasseurs (+ 43 200 € / an) — *Démonstration de la hausse de 35 %*
+#### 2. Ventes supplémentaires par la productivité des Chasseurs (+ 45 000 € / an) — *de 2 heures libérées à 5 ventes de plus*
 * **Constat initial :** Dans le SI hérité, les 6 chasseurs passent en moyenne **4 heures par jour (50 % de leur journée de travail)** à éplucher manuellement les portails d'annonces (SeLoger, Leboncoin, PAP) et à relire des notes éparses. Il ne leur reste que 4 heures pour le contact direct, les visites et la négociation.
 * **Gain de temps opérationnel :** La structuration typée des critères de recherche (`demande_version`) et l'ingestion automatisée des annonces libèrent **2 heures par jour et par chasseur** — soit la moitié du temps perdu chiffré au §3 —, réallouées à 100 % au terrain.
-* **Calcul du gain financier direct :**
+* **Du temps libéré aux ventes supplémentaires :** les chasseurs sont des indépendants ; leurs heures ne sont pas une charge de Chasse Immo, et les heures libérées ne sont donc pas un gain pour elle. Le gain n'existe que si ce temps se transforme en ventes, donc en honoraires. Le calcul suit la chaîne heures libérées → visites → taux de transformation (démonstration ci-dessous) → ventes × honoraires × part de l'entreprise :
 
 ```
-Gain de productivité = 6 chasseurs × 2 h/jour × 180 jours ouvrés de prospection × 20 €/h
-                     = 43 200 € / an
+Mandats signés par an    = 6 chasseurs × 12 mandats (hypothèse : un par mois)       = 72 mandats
+Ventes supplémentaires   = 72 × (27 % − 20 %)                                        = 5,04 ≈ 5 ventes
+Part de l'entreprise     = 15 000 € d'honoraires × 60 %                               = 9 000 € par vente
+                           (barème : 40 % au chasseur dans la tranche 350 à 500 k€)
+Gain pour l'entreprise   = 5 ventes × 9 000 €                                         = 45 000 € / an
 ```
 
-* **Nature de ce montant : un gain de capacité, pas une économie.** Les chasseurs sont des indépendants : les deux heures libérées n'allègent aucune charge salariale de Chasse Immo. Le taux horaire de 20 € sert à rendre ce temps comparable aux autres postes, pas à le facturer. Ce gain ne devient un bénéfice pour l'entreprise que par les ventes supplémentaires qu'il permet (hausse du taux de transformation ci-dessous) : c'est donc une **capacité convertie en marge sous hypothèse**, et le récapitulatif (§6.2-4) le classe comme tel.
+* **Hypothèses à confirmer :** le nombre de mandats signés par an (à demander au Product Owner, puis lu dans la base pendant le pilote) et les honoraires moyens de 15 000 € (même base que le levier 1). Pour mémoire, le temps libéré valorisé à 20 €/h (6 × 2 h × 180 jours = 43 200 €) mesure une capacité, pas un gain : il n'est plus compté (revue d'Angeline Gomez, 14/10/2026).
 
 * **Démonstration de la hausse de +35 % du taux de transformation commercial :**
   * *Avant refonte :* Avec 4h/jour sur le terrain, chaque chasseur ne peut réaliser en moyenne que **2 visites qualifiées par semaine**. Le taux de transformation historique d'un mandat en vente signée est de **20 %** (1 mandat sur 5 conclut une vente).
@@ -552,25 +557,25 @@ Les tableaux de bord Power BI alimentés par le datamart OLAP apportent deux lev
    * Grâce aux dimensions d'analyse du datamart, la direction affine les paliers de commissions (par exemple en valorisant davantage les mandats exclusifs qui se vendent 2 fois plus vite). Cet ajustement motive les chasseurs tout en optimisant la marge brute conservée par l'entreprise (**+27 000 € nets estimés**, seul montant retenu pour ce levier).
    * **Nature de ce montant : une hypothèse non démontrée par un calcul.** Il manque l'assiette (honoraires annuels), le volume de ventes concerné, la marge actuelle et l'effet attendu du changement de barème. Ces éléments sont à construire avec la direction pendant le pilote (§7.5), à partir des indicateurs de l'entrepôt. Le montant se lit comme un ordre de grandeur, testé par le scénario « gains divisés par deux » du §6.3.
 
-#### 4. BÉNÉFICE FINANCIER GLOBAL IMMÉDIAT (Année 1) : **115 200 €**
+#### 4. BÉNÉFICE FINANCIER GLOBAL IMMÉDIAT (Année 1) : **117 000 €**
 
 Trois natures de gains, à ne pas additionner sans le dire :
 
 | Nature | Levier | Montant | Comment il devient un bénéfice pour l'entreprise | Preuve attendue |
 |---|---|:---:|---|---|
-| **Gain de capacité** | 2 — productivité des chasseurs | 43 200 € | temps d'indépendants libéré, converti en ventes supplémentaires par la hausse du taux de transformation (20 % → 27 %, hypothèse) | pilote §7.5 : temps de recherche et visites par semaine, avant et après |
+| **Gain commercial estimé** | 2 — ventes supplémentaires par la productivité des chasseurs | 45 000 € | 5 ventes de plus par an grâce au temps rendu au terrain (72 mandats par an, taux de transformation 20 % → 27 % : hypothèses), dont l'entreprise conserve 60 % des honoraires | pilote §7.5 : temps de recherche, visites et mandats par semaine, avant et après |
 | **Gain monétaire estimé** | 3 — pilotage du barème | 27 000 € | marge conservée sur les honoraires grâce à un barème mieux réglé ; calcul à construire (assiette, volume, effet) | indicateurs de l'entrepôt la première année |
 | **Risque évité** | 1 — sécurisation du chiffre d'affaires | 45 000 € | honoraires qui ne sont plus contestables parce que l'échéance des mandats est suivie | contestations reçues et ventes sous mandat échu, mesurées la première année |
-| **Total des gains estimés de l'année 1** | | **115 200 €** | dont gains d'exploitation (leviers 2 et 3) : **70 200 €** | |
+| **Total des gains estimés de l'année 1** | | **117 000 €** | dont gains d'exploitation (leviers 2 et 3) : **72 000 €** | |
 
-Les gains d'exploitation couvrent à eux seuls le coût total de la première année (70 200 € contre 65 469 €) : c'est le scénario « sans le levier 1 » du §6.3 (ROI an 1 de +7,2 %). Ce scénario n'est pas encore une preuve de rentabilité : il repose sur un gain de capacité converti en ventes et sur une hypothèse non calculée. C'est pourquoi la décision de généralisation après le pilote (§7.5) conditionne la suite, et pourquoi le §6.3 teste des gains divisés par deux.
+Les gains d'exploitation couvrent à eux seuls le coût total de la première année (72 000 € contre 65 469 €) : c'est le scénario « sans le levier 1 » du §6.3 (ROI an 1 de +10,0 %). Ce scénario n'est pas encore une preuve de rentabilité : il repose sur des ventes supplémentaires sous hypothèse et sur un montant non calculé. C'est pourquoi la décision de généralisation après le pilote (§7.5) conditionne la suite, et pourquoi le §6.3 teste des gains divisés par deux.
 
 #### 5. Valeur Stratégique d'Optionnalité & Économies d'Échelle M&A (Croissance Externe Internationale)
 
 Une question stratégique majeure pour la Direction Générale concerne la capacité du nouveau SI à **absorber rapidement les données d'entreprises cibles étrangères** dans le cadre de futures opérations de fusions-acquisitions (*M&A / External Growth* vers les 9 pays européens ciblés en Phase 3) :
 
 * **Principe de prudence financière (Doctrine RNCP7 & DAF) :**  
-  Ces gains de facilitation ne sont **délibérément pas comptabilisés dans le calcul du ROI de l'année 1 (76 %)** ni dans le point mort (6,8 mois). En finance d'entreprise, intégrer des flux d'acquisitions futures non encore signées affaiblirait la crédibilité de l'audit. Le business case d'ingénierie doit prouver sa rentabilité sur le périmètre certain à T0.
+  Ces gains de facilitation ne sont **délibérément pas comptabilisés dans le calcul du ROI de l'année 1 (78,7 %)** ni dans le point mort (6,7 mois). En finance d'entreprise, intégrer des flux d'acquisitions futures non encore signées affaiblirait la crédibilité de l'audit. Le business case d'ingénierie doit prouver sa rentabilité sur le périmètre certain à T0.
 * **Chiffrage de l'Évitement de Coût d'Intégration (*Post-Merger Integration - PMI Cost Avoidance*) :**  
   * *Avec le SI hérité :* L'ingestion des bases de données hétérogènes d'une société cible étrangère (formats propriétaires, absence de normalisation géographique, pas de multi-devises) aurait imposé 6 à 9 mois de développements spécifiques d'urgence et une refonte complète du backend, pour un surcoût externe estimé entre **50 000 € et 80 000 € par opération de rachat**.
   * *Avec l'Architecture Cible Option B (socle v8.41) :* La base intègre nativement les standards internationaux :
@@ -589,59 +594,59 @@ En intégrant l'intégralité du TCO de l'année 1 (CAPEX de 53 201 €, provisi
 
 ```
 ROI (année 1)          = (Gains année 1 − TCO année 1) / TCO année 1 × 100
-                       = (115 200 − 65 469) / 65 469 × 100            = 76,0 %
+                       = (117 000 − 65 469) / 65 469 × 100            = 78,7 %
 
 Point mort (payback)   = TCO année 1 / gains mensuels moyens
-                       = 65 469 € / 9 600 €/mois                      = 6,82 mois ≈ 6,8 mois
+                       = 65 469 € / 9 750 €/mois                      = 6,71 mois ≈ 6,7 mois
 
 ROI sur 3 ans          = (3 × gains annuels − TCO 3 ans) / TCO 3 ans × 100
-                       = (345 600 − 93 790) / 93 790 × 100            = 268,5 %
+                       = (351 000 − 93 790) / 93 790 × 100            = 274,2 %
 ```
 
 **Pourquoi deux horizons :** le ROI de la première année supporte tout l'investissement initial ; il est donc très sensible aux hypothèses de coût. Le ROI sur 3 ans, calculé sur la même durée que le TCO, mesure la rentabilité une fois l'investissement amorti : c'est l'indicateur le plus robuste du dossier.
 
 #### 2. Trajectoire de trésorerie après mise en production
 
-Hypothèse prudente : l'intégralité du TCO de l'année 1 est considérée comme engagée dès le démarrage ; les gains (9 600 €/mois) courent à partir du premier mois d'exploitation.
+Hypothèse prudente : l'intégralité du TCO de l'année 1 est considérée comme engagée dès le démarrage ; les gains (9 750 €/mois) courent à partir du premier mois d'exploitation.
 
 | Mois d'exploitation | Gains cumulés | Position nette (gains − TCO an 1) |
 |---|:---:|:---:|
-| M+1 | 9 600 € | − 55 869 € |
-| M+2 | 19 200 € | − 46 269 € |
-| M+3 | 28 800 € | − 36 669 € |
-| M+4 | 38 400 € | − 27 069 € |
-| M+5 | 48 000 € | − 17 469 € |
-| M+6 | 57 600 € | − 7 869 € |
-| **M+7 — point mort franchi** | **67 200 €** | **+ 1 731 €** |
-| M+12 | 115 200 € | **+ 49 731 €** |
+| M+1 | 9 750 € | − 55 719 € |
+| M+2 | 19 500 € | − 45 969 € |
+| M+3 | 29 250 € | − 36 219 € |
+| M+4 | 39 000 € | − 26 469 € |
+| M+5 | 48 750 € | − 16 719 € |
+| M+6 | 58 500 € | − 6 969 € |
+| **M+7 — point mort franchi** | **68 250 €** | **+ 2 781 €** |
+| M+12 | 117 000 € | **+ 51 531 €** |
 
-> **Indicateur Décisionnel :** Le projet s'auto-finance en **6,8 mois d'exploitation**, même en intégrant l'ensemble des charges récurrentes, la maintenance, les dépenses ponctuelles et la provision pour aléas. La mise en production intervenant à la fin de la semaine 14 du planning (§7.1), le point mort tombe **environ 10 mois après le GO** : 3,2 mois de construction, puis 6,8 mois d'exploitation. **Ce point mort est une estimation conventionnelle** : il suppose tout le coût de l'année engagé au GO et des gains constants dès le premier mois. Avec une montée progressive des gains, plus réaliste après un pilote (aucun gain pendant les 14 semaines du projet, la moitié des gains pendant les 3 mois suivants, puis la totalité), le **temps de retour estimé est d'environ 12 mois après le GO**, et d'environ 16 mois en ne comptant que les gains d'exploitation. Pour parler d'excédent de trésorerie, il faudrait en outre que ces gains soient des encaissements ou des dépenses évitées, ce qui n'est pas démontré pour les heures libérées (§6.2-2). À douze mois d'exploitation, l'entreprise dégage un excédent net de trésorerie de **+49 731 €** (115 200 − 65 469).
+> **Indicateur Décisionnel :** Le projet s'auto-finance en **6,7 mois d'exploitation**, même en intégrant l'ensemble des charges récurrentes, la maintenance, les dépenses ponctuelles et la provision pour aléas. La mise en production intervenant à la fin de la semaine 14 du planning (§7.1), le point mort tombe **environ 10 mois après le GO** : 3,2 mois de construction, puis 6,7 mois d'exploitation. **Ce point mort est une estimation conventionnelle** : il suppose tout le coût de l'année engagé au GO et des gains constants dès le premier mois. Avec une montée progressive des gains, plus réaliste après un pilote (aucun gain pendant les 14 semaines du projet, la moitié des gains pendant les 3 mois suivants, puis la totalité), le **temps de retour estimé est d'environ 12 mois après le GO**, et d'environ 16 mois en ne comptant que les gains d'exploitation. Pour parler d'excédent de trésorerie, il faudrait en outre que ces gains soient des encaissements ou des dépenses évitées, ce qui suppose que les ventes supplémentaires du levier 2 se réalisent (§6.2-2). À douze mois d'exploitation, l'entreprise dégage un excédent net de trésorerie de **+51 531 €** (117 000 − 65 469).
 
 #### 3. Sensibilité aux hypothèses de gains
 
-Le business case repose sur des hypothèses explicites mais non mesurées — 3 ventes contestées par an, 2 h libérées par jour et par chasseur, +27 000 € liés au pilotage. Pour éprouver leur solidité, les gains sont soumis à trois scénarios, à coût constant :
+Le business case repose sur des hypothèses explicites mais non mesurées — 3 ventes contestées par an, 5 ventes supplémentaires par an (2 h libérées par jour et par chasseur, 72 mandats par an), +27 000 € liés au pilotage. Pour éprouver leur solidité, les gains sont soumis à trois scénarios, à coût constant :
 
 | Scénario | Hypothèse sur les gains | Gains année 1 | ROI année 1 | Point mort | ROI sur 3 ans |
 |---|---|:---:|:---:|:---:|:---:|
-| Pessimiste | Gains divisés par deux (−50 %) | 57 600 € | − 12,0 % | 13,6 mois | + 84,2 % |
-| Sans le levier 1 | Aucune vente contestée évitée (−45 000 €) | 70 200 € | + 7,2 % | 11,2 mois | + 124,5 % |
-| **Central** | **Hypothèses du §6.2** | **115 200 €** | **+ 76,0 %** | **6,8 mois** | **+ 268,5 %** |
-| Optimiste | Gains majorés de 25 % | 144 000 € | + 120,0 % | 5,5 mois | + 360,6 % |
+| Pessimiste | Gains divisés par deux (−50 %) | 58 500 € | − 10,6 % | 13,4 mois | + 87,1 % |
+| Sans le levier 1 | Aucune vente contestée évitée (−45 000 €) | 72 000 € | + 10,0 % | 10,9 mois | + 130,3 % |
+| **Central** | **Hypothèses du §6.2** | **117 000 €** | **+ 78,7 %** | **6,7 mois** | **+ 274,2 %** |
+| Optimiste | Gains majorés de 25 % | 146 250 € | + 123,4 % | 5,4 mois | + 367,8 % |
 
-**Lecture :** le projet est remboursé dans l'année **dès que 56,8 % des gains estimés se réalisent** (65 469 ÷ 115 200). Avec des gains divisés par deux, la première année est déficitaire (−12,0 %), mais le projet reste **rentable sur 3 ans (+84,2 %)**. L'hypothèse la plus fragile est le levier 1 (45 000 €, 39 % des gains), fondé sur un nombre de ventes contestées non mesuré : même sans lui, le ROI reste positif dès la première année (+7,2 %).
+**Lecture :** le projet est remboursé dans l'année **dès que 56,0 % des gains estimés se réalisent** (65 469 ÷ 117 000). Avec des gains divisés par deux, la première année est déficitaire (−10,6 %), mais le projet reste **rentable sur 3 ans (+87,1 %)**. L'hypothèse la plus fragile est le levier 1 (45 000 €, 38 % des gains), fondé sur un nombre de ventes contestées non mesuré : même sans lui, le ROI reste positif dès la première année (+10,0 %). Le levier 2, de même poids, repose sur un nombre de mandats par an à confirmer : c'est l'objet du pilote (§7.5).
 
 #### 4. Sensibilité aux hypothèses de coût
 
 | Hypothèse de coût | TCO année 1 | ROI année 1 | Point mort | ROI sur 3 ans |
 |---|:---:|:---:|:---:|:---:|
-| **Scénario central** (équipe interne à 350 €/j, OPEX sourcé, dépenses ponctuelles, provision de 10 %) | **65 469 €** | **+ 76,0 %** | **6,8 mois** | **+ 268,5 %** |
-| Sans provision pour aléas | 60 919 € | + 89,1 % | 6,3 mois | + 287,3 % |
-| OPEX doublé | 77 737 € | + 48,2 % | 8,1 mois | + 157,2 % |
-| Réalisation par des prestataires, médiane 640 €/j | 106 939 € | + 7,7 % | 11,1 mois | + 155,5 % |
-| Réalisation par des prestataires, haut de fourchette 730 €/j | 119 809 € | − 3,8 % | 12,5 mois | + 133,3 % |
-| **Pire cas cumulé** : prestataires à 730 €/j, OPEX doublé **et** gains divisés par deux | 132 077 € | − 56,4 % | 27,5 mois | **− 8,4 %** |
+| **Scénario central** (équipe interne à 350 €/j, OPEX sourcé, dépenses ponctuelles, provision de 10 %) | **65 469 €** | **+ 78,7 %** | **6,7 mois** | **+ 274,2 %** |
+| Sans provision pour aléas | 60 919 € | + 92,1 % | 6,2 mois | + 293,3 % |
+| OPEX doublé | 77 737 € | + 50,5 % | 8,0 mois | + 161,2 % |
+| Réalisation par des prestataires, médiane 640 €/j | 106 939 € | + 9,4 % | 11,0 mois | + 159,5 % |
+| Réalisation par des prestataires, haut de fourchette 730 €/j | 119 809 € | − 2,3 % | 12,3 mois | + 137,0 % |
+| **Pire cas cumulé** : prestataires à 730 €/j, OPEX doublé **et** gains divisés par deux | 132 077 € | − 55,7 % | 27,1 mois | **− 7,0 %** |
 
-**Lecture :** pris isolément, aucun aléa de coût ne rend le projet déficitaire sur 3 ans. Seul le cumul des trois hypothèses les plus défavorables y parvient (−8,4 %). C'est la limite de validité du business case, et la raison pour laquelle le mode de réalisation (§6.1-3) et la tenue des gains (KPI-1 à KPI-5) doivent être pilotés dès le lancement.
+**Lecture :** pris isolément, aucun aléa de coût ne rend le projet déficitaire sur 3 ans. Seul le cumul des trois hypothèses les plus défavorables y parvient (−7,0 %). C'est la limite de validité du business case, et la raison pour laquelle le mode de réalisation (§6.1-3) et la tenue des gains (KPI-1 à KPI-5) doivent être pilotés dès le lancement.
 
 ---
 
@@ -804,7 +809,7 @@ PHASE 2 — DANS LE PÉRIMÈTRE (socle v8.41)        PHASES 3 ET 4 — HORS PÉR
 
 * **Dans le périmètre de la Phase 2 (socle v8.41) :** La table `document` stocke les métadonnées juridiques indispensables (type de pièce, clé objet, URI, type MIME, taille, horodatage, empreinte de contrôle SHA-256) ; les fichiers eux-mêmes sont stockés hors base, sur stockage objet (ADR-042). Elle est rattachée aux avis de visite (`note_avis_document`) et aux factures des chasseurs (`facture_document`).
 * **Hors périmètre de la Phase 2 / Envisagé en Phase 3-4 (Armoire numérique complète) :** Le déploiement de l'infrastructure d'hébergement objet sécurisé (compatible S3 ; la maquette MinIO du 12/10 a montré que l'image officielle n'est plus librement distribuée et que sa console a été retirée des versions gratuites : un stockage objet managé européen est recommandé), le coffre-fort électronique à valeur probante (norme NF Z42-013), le rattachement des pièces aux mandats, compromis et actes, et l'intégration des API de signature électronique dématérialisée sont formellement séquencés en **Phase 3**.
-* **Bénéfice de cet arbitrage :** Cette séparation nette garantit que le projet respecte strictement son enveloppe TCO initiale de **65 469 €** et son délai d'amortissement de **6,8 mois**, tout en prévenant toute refonte de structure lorsque l'armoire de dossiers sera raccordée.
+* **Bénéfice de cet arbitrage :** Cette séparation nette garantit que le projet respecte strictement son enveloppe TCO initiale de **65 469 €** et son délai d'amortissement de **6,7 mois**, tout en prévenant toute refonte de structure lorsque l'armoire de dossiers sera raccordée.
 
 ### 7.5 Conduite du changement et adoption par les chasseurs
 
@@ -829,9 +834,9 @@ PHASE 2 — DANS LE PÉRIMÈTRE (socle v8.41)        PHASES 3 ET 4 — HORS PÉR
 ## 8. Conclusion & Recommandation formelle au comité de direction
 
 L'analyse d'opportunité est sans équivoque :
-* Le SI hérité ne peut pas être conservé : il génère **151 400 € de pertes et de risques juridiques annuels** et bloque tout déploiement d'Intelligence Artificielle.
+* Le SI hérité ne peut pas être conservé : il génère **110 000 € de pertes et de risques juridiques annuels** et bloque tout déploiement d'Intelligence Artificielle.
 * Le rafistolage est une fausse économie qui laisserait en place un backend non documenté et une structure inapte au décisionnel.
-* La refonte cible selon l'**Architecture B (socle OLTP PostgreSQL + entrepôt OLAP)** est techniquement mature — le socle v8.43 passe l'intégralité de sa recette —, avec un temps de retour estimé à 6,8 mois d'exploitation, **rentable sur 3 ans même avec des gains divisés par deux ou une réalisation par des prestataires**, et répond trait pour trait aux exigences de pilotage exprimées par le Product Owner et la direction générale.
+* La refonte cible selon l'**Architecture B (socle OLTP PostgreSQL + entrepôt OLAP)** est techniquement mature — le socle v8.43 passe l'intégralité de sa recette —, avec un temps de retour estimé à 6,7 mois d'exploitation, **rentable sur 3 ans même avec des gains divisés par deux ou une réalisation par des prestataires**, et répond trait pour trait aux exigences de pilotage exprimées par le Product Owner et la direction générale.
 * Ses risques sont identifiés, chacun avec un traitement et un niveau résiduel visé (§5.4), contrairement à ceux de l'option C, qui exigent une capacité d'exploitation distribuée dont l'entreprise ne dispose pas.
 
 > **RECOMMANDATION FORMELLE : AVIS FAVORABLE (« GO ») AVEC TROIS RÉSERVES**  
@@ -853,15 +858,15 @@ L'analyse d'opportunité est sans équivoque :
 
 #### Q1 : « Pourquoi avoir réalisé une Étude d'opportunité alors que le commanditaire avait déjà conscience des faiblesses de son SI ? »
 > **Réponse attendue :**  
-> *« Un constat de panne ne constitue pas un projet d'ingénierie. Savoir que le système actuel fonctionne mal ne dit ni combien cela coûte à l'entreprise, ni quelle est la meilleure trajectoire de sortie. L'Étude d'opportunité transforme un sentiment d'irritation métier en un dossier d'ingénieur d'affaires rigoureux : elle chiffre le coût de l'inaction (151,4 k€/an), compare trois options réelles au moyen d'une grille multicritère, prouve que l'Option B est rentabilisée en moins de 7 mois et fournit à la direction les éléments rationnels pour engager les investissements de la Phase 2. »*
+> *« Un constat de panne ne constitue pas un projet d'ingénierie. Savoir que le système actuel fonctionne mal ne dit ni combien cela coûte à l'entreprise, ni quelle est la meilleure trajectoire de sortie. L'Étude d'opportunité transforme un sentiment d'irritation métier en un dossier d'ingénieur d'affaires rigoureux : elle chiffre le coût de l'inaction (110 k€/an), compare trois options réelles au moyen d'une grille multicritère, prouve que l'Option B est rentabilisée en moins de 7 mois et fournit à la direction les éléments rationnels pour engager les investissements de la Phase 2. »*
 
 #### Q2 : « Pourquoi avoir exclu l'Option C (Sharding / Base distribuée) alors qu'elle offre un score de 80 points et prépare l'international ? »
 > **Réponse attendue :**  
 > *« L'ingénieur doit concevoir une architecture que l'entreprise est réellement en mesure d'exploiter (Fitness for Purpose). Chasse Immo est une PME dont l'équipe d'exploitation est actuellement réduite à zéro suite à l'arrêt de son développeur unique. Imposer une architecture shardée distribuée nécessiterait une équipe d'infogérance 24/7 et dégraderait le matching d'IA (recherche vectorielle éclatée sur plusieurs nœuds physiques). L'Option B traite l'intégralité du besoin pour les trois ans à venir avec un PCA/PRA simple et fiable. L'Option C n'est pas abandonnée, elle est sagement séquencée pour la Phase 3 avancée. »*
 
-#### Q3 : « En quoi un ROI de 76 % la première année est-il crédible dans un projet de migration de seulement 52 lignes ? »
+#### Q3 : « En quoi un ROI de 78,7 % la première année est-il crédible dans un projet de migration de seulement 52 lignes ? »
 > **Réponse attendue :**  
-> *« Le ROI ne se mesure pas au nombre d'octets migrés, mais à la valeur des flux financiers protégés et des heures de travail libérées. Les 52 lignes initiales représentent 18 mandats dont 6 étaient juridiquement caducs, exposant l'agence à 45 k€ de contestations d'honoraires par an. Sécuriser ces honoraires par le calcul de l'échéance et diviser par deux le temps de sourcing manuel des 6 chasseurs génère 115 k€ de gains annuels estimés, face à un coût total de 65,5 k€ la première année, chiffré aux prix publics d'un hébergeur français, dépenses ponctuelles et provision pour aléas comprises. Et surtout, ce chiffre résiste à la critique : le projet est remboursé dans l'année dès que 57 % des gains se réalisent, et il reste rentable sur 3 ans même avec des gains divisés par deux ou une réalisation par une ESN. Seul le cumul des trois hypothèses les plus défavorables le rend déficitaire : nous l'avons calculé et nous l'affichons. Le ROI est un indicateur prospectif par nature : il porte sur des flux futurs estimés, pas sur un historique. La solidité du dossier ne tient donc pas à la valeur de 76 %, mais à l'analyse de sensibilité, et au fait que les gains d'exploitation couvrent seuls le coût de l'année 1, sans compter le risque évité. »*
+> *« Le ROI ne se mesure pas au nombre d'octets migrés, mais à la valeur des flux financiers protégés et des ventes supplémentaires que le temps libéré permet. Les 52 lignes initiales représentent 18 mandats dont 6 étaient juridiquement caducs, exposant l'agence à 45 k€ de contestations d'honoraires par an. Sécuriser ces honoraires par le calcul de l'échéance et rendre au terrain la moitié du temps de sourcing manuel des 6 chasseurs, soit environ 5 ventes de plus par an, génère 117 k€ de gains annuels estimés, face à un coût total de 65,5 k€ la première année, chiffré aux prix publics d'un hébergeur français, dépenses ponctuelles et provision pour aléas comprises. Et surtout, ce chiffre résiste à la critique : le projet est remboursé dans l'année dès que 56 % des gains se réalisent, et il reste rentable sur 3 ans même avec des gains divisés par deux ou une réalisation par une ESN. Seul le cumul des trois hypothèses les plus défavorables le rend déficitaire : nous l'avons calculé et nous l'affichons. Le ROI est un indicateur prospectif par nature : il porte sur des flux futurs estimés, pas sur un historique. La solidité du dossier ne tient donc pas à la valeur de 78,7 %, mais à l'analyse de sensibilité, et au fait que les gains d'exploitation couvrent seuls, sous hypothèse, le coût de l'année 1, sans compter le risque évité. »*
 
 #### Q4 : « Quel est le lien entre le recueil des besoins du Product Owner et votre architecture décisionnelle ? »
 > **Réponse attendue :**  
@@ -881,7 +886,7 @@ L'analyse d'opportunité est sans équivoque :
 
 #### Q8 : « Pourquoi ne pas inclure les gains d'ingestion des sociétés cibles rachetées à l'international dans votre calcul de ROI initial ? »
 > **Réponse attendue :**  
-> *« C'est un principe fondamental de rigueur financière et de prudence d'ingénieur d'affaires. À T0, les futures opérations de fusions-acquisitions (M&A) ne sont pas encore actées. Intégrer des gains hypothétiques de rachat dans le calcul du ROI de l'année 1 (76 %) et du point mort (6,8 mois) fausserait l'analyse en gonflant artificiellement les chiffres. Nous avons choisi de prouver la rentabilité immédiate du projet uniquement sur l'activité existante pérenne (115,2 k€ de gains récurrents pour 65,5 k€ de coût total la première année). En revanche, nous valorisons la facilitation d'ingestion de données étrangères comme un gain stratégique d'optionnalité (M&A Onboarding Agility) : grâce aux normes ISO 3166 pour les pays et ISO 4217 pour les devises, déjà présentes dans le socle, et aux tables de staging du pipeline ETL, chaque futur rachat fera économiser entre 35 000 et 50 000 € de coûts d'intégration tout en réduisant le délai de raccordement de 6 à 9 mois à 2 à 3 semaines. »*
+> *« C'est un principe fondamental de rigueur financière et de prudence d'ingénieur d'affaires. À T0, les futures opérations de fusions-acquisitions (M&A) ne sont pas encore actées. Intégrer des gains hypothétiques de rachat dans le calcul du ROI de l'année 1 (78,7 %) et du point mort (6,7 mois) fausserait l'analyse en gonflant artificiellement les chiffres. Nous avons choisi de prouver la rentabilité immédiate du projet uniquement sur l'activité existante pérenne (115,2 k€ de gains récurrents pour 65,5 k€ de coût total la première année). En revanche, nous valorisons la facilitation d'ingestion de données étrangères comme un gain stratégique d'optionnalité (M&A Onboarding Agility) : grâce aux normes ISO 3166 pour les pays et ISO 4217 pour les devises, déjà présentes dans le socle, et aux tables de staging du pipeline ETL, chaque futur rachat fera économiser entre 35 000 et 50 000 € de coûts d'intégration tout en réduisant le délai de raccordement de 6 à 9 mois à 2 à 3 semaines. »*
 
 #### Q9 : « Votre business case mise sur davantage de visites, alors que le barème récompense le chasseur qui en fait moins. N'est-ce pas contradictoire ? »
 > **Réponse attendue :**  
@@ -893,7 +898,7 @@ L'analyse d'opportunité est sans équivoque :
 
 #### Q11 : « Pourquoi ne pas avoir confié le projet à une ESN, plus rapide et plus expérimentée ? »
 > **Réponse attendue :**  
-> *« Parce que le coût et le risque vont dans le même sens. Au prix du marché — 530 à 730 € par jour pour un data engineer —, le coût de la première année passerait de 65 k€ à 91, voire 120 k€, et le ROI de la première année tomberait entre +26 % et −4 %, même si le projet resterait rentable sur 3 ans. Surtout, l'anomalie A11 montre ce que coûte un SI confié à un prestataire unique sans transfert de compétences : un système que plus personne ne sait faire évoluer. Nous recommandons donc une équipe interne, avec au moins un ingénieur data qui reste pour l'exploitation, et un recours ponctuel à une ESN pour des expertises précises, assorti d'une clause de transfert de compétences. »*
+> *« Parce que le coût et le risque vont dans le même sens. Au prix du marché — 530 à 730 € par jour pour un data engineer —, le coût de la première année passerait de 65 k€ à 91, voire 120 k€, et le ROI de la première année tomberait entre +28 % et -2 %, même si le projet resterait rentable sur 3 ans. Surtout, l'anomalie A11 montre ce que coûte un SI confié à un prestataire unique sans transfert de compétences : un système que plus personne ne sait faire évoluer. Nous recommandons donc une équipe interne, avec au moins un ingénieur data qui reste pour l'exploitation, et un recours ponctuel à une ESN pour des expertises précises, assorti d'une clause de transfert de compétences. »*
 
 #### Q12 : « Quels sont les risques de l'option que vous recommandez ? »
 > **Réponse attendue :**  
@@ -916,4 +921,4 @@ L'analyse d'opportunité est sans équivoque :
 | 3.0 | 12/10/2026 | Matthieu Barre | Synthèse de deux pages en tête de page (format cible de la grille d'évaluation : 1 à 2 pages), l'étude complète v2.1 devenant l'annexe. Journal des décisions métier D10 à D17 sur une page dédiée. Socle v8.42 en relecture (PR #14 et #15). |
 | 3.1 | 13/10/2026 | Matthieu Barre | Revue de l'A (Alexandre Kechaf, 13/10) intégrée : levier 1 requalifié en risque évité et séparé des gains d'exploitation ; levier 2 assumé comme hypothèse, avec plan de mesure ; conduite du changement (§7.5, pilote et indicateurs d'adoption, risque RB9, financée par la provision : montants inchangés) ; planning sur 14 semaines avec jalons et critères d'acceptation, réconcilié avec le chiffrage (§7.1) ; point mort exprimé par rapport au GO ; question Q13 sur la note 3V ; mise à jour du partitionnement et du stockage objet d'après le dossier d'architecture cible et la maquette MinIO ; avis d'un DPO recommandé (PO-14). |
 | 3.2 | 14/10/2026 | Matthieu Barre | Revue de Thérèse Nguyen (14/10) intégrée. Corrections factuelles : argument des verrous remplacé par la concurrence de ressources ; durée de 6 mois rattachée à l'énoncé et non à la loi Hoguet ; unité des 55 % (6 des 11 mandats actifs). Options de l'étude mises en correspondance avec celles de la matrice de décision (EO / ARCH). Formulations sur le sharding ramenées à « non mesuré » ; lecture corrigée du test de sensibilité. Risques : niveaux « résiduels visés », asymétrie B / C assumée. Ordre de grandeur des coûts de ARCH-C et ARCH-D. Gains présentés en trois natures (capacité, monétaire estimé, risque évité) ; 27 000 € qualifiés d'hypothèse non calculée ; point mort présenté comme estimation conventionnelle, avec temps de retour à montée progressive (≈ 12 mois). Périmètre chiffré explicité : le backend applicatif complet est hors des 65 469 € (fourchette indicative 60 à 90 j.h). Backend hérité : lecture seule limitée au compte d'extraction. RPO/RTO et exercice de restauration à harmoniser avec le cahier des charges technique dans le PCA/PRA. Prérequis fonctionnels du pilote. Montants du business case inchangés. |
-| 3.3 | 15/10/2026 | Matthieu Barre | Revue d'Angeline Gomez (PR #17, 14/10) intégrée, points B, D, E et F : références alignées sur le socle v8.43 fusionné le 15/10 (38 tables, 9 vues, 7 index ; recette rejouée ; PO-1 passe « en cours ») ; partitionnement : la réserve repose sur la sortie des unicités métier et non sur la seule reprise de données (RB6, dossier d'architecture cible v1.2) ; questions au Product Owner reformulées d'après le journal (D13 et D19 posées, D20 actée avec une question non bloquante, D18 posée à l'équipe). Point A (nature du gain de productivité) : traité à part, voir la réponse sur la PR #17. |
+| 3.3 | 15/10/2026 | Matthieu Barre | Revue d'Angeline Gomez (PR #17, 14/10) intégrée, points B, D, E et F : références alignées sur le socle v8.43 fusionné le 15/10 (38 tables, 9 vues, 7 index ; recette rejouée ; PO-1 passe « en cours ») ; partitionnement : la réserve repose sur la sortie des unicités métier et non sur la seule reprise de données (RB6, dossier d'architecture cible v1.2) ; questions au Product Owner reformulées d'après le journal (D13 et D19 posées, D20 actée avec une question non bloquante, D18 posée à l'équipe). Point A : le gain de productivité est réexprimé en ventes supplémentaires (72 mandats par an × 7 points de transformation ≈ 5 ventes × 9 000 € de part entreprise = 45 000 €), le temps des chasseurs n'étant pas une charge de l'entreprise ; le coût de l'inaction retient le manque à gagner correspondant (45 000 €) à la place des 86 400 € de temps perdu, soit 110 000 € par an. Gains de l'année 1 : 117 000 € (dont 72 000 € d'exploitation) ; ROI an 1 78,7 %, 3 ans 274,2 % ; point mort 6,7 mois ; trajectoire de trésorerie et tableaux de sensibilité recalculés. |
