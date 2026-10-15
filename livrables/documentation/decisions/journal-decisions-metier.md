@@ -26,6 +26,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | D17 | Hors périmètre : partage d'honoraires, visite accompagnée obligatoire, rendez-vous à trois | actée, simulée : confirmée | aucun (phase 4 si besoin) |
 | D18 | Une chaîne de mandats aboutit à **au plus un acte** (un seul achat par recherche) | **posée à l'équipe** (revue PR #14, point B) | v8.42 : garde S24 et trigger de l'acte classique, PR suivante |
 | D19 | Honoraires et marge de l'entrepôt en **HT** ; l'assiette OLTP reste celle de l'énoncé (fixe + %), dans la base du mandat | **posée au PO** (revue PR #15, point 2) | ETL : conversion selon `base_honoraires` et `taux_tva` |
+| D20 | Rémunération du chasseur **seulement après encaissement** des honoraires par l'entreprise (litige = pas de paiement) | actée (règle du Readme, parcours du chasseur, étape 10, jusqu'ici non contrainte) | v8.43 : garde S28, tests T36-T37 |
 
 ---
 
@@ -52,6 +53,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 - **Alternatives écartées.** Note 0 : sanction maximale (comme 18 visites) ; « 0 visite » convertie = 100 : bonus pour un ciblage non fait. Écart entre les deux : 540 € sur l'exemple de Bruno (5 799,60 € contre 6 339,60 €).
 - **Effet.** ADR-049 §2.3 et ADR-053 §5 ; règle du moteur de calcul (OLAP / applicatif), hors schéma. Ces actes sont exclus du KPI-3.
 - **Réponse simulée du PO.** « Ni bonus ni malus pour un bien que le chasseur n'a pas trouvé : 50, ça me va. Mais si le client a visité dix biens avec lui avant, on les compte. »
+- **Complément (13/10/2026, Matthieu Barre).** (1) La note de 50 est maintenue et argumentée : une vente à 0 visite est presque toujours un achat hors dispositif où le client a trouvé seul ; noter 100 récompenserait au maximum un ciblage qui n'a pas été fait (aléa moral), noter 0 punirait injustement. (2) **Nouvelle proposition** : une vente à 0 visite déclenche une **alerte direction** au tableau de bord (signal d'un client qui a court-circuité un chasseur inactif, ou d'une anomalie de process : offre sans visite). Distincte de l'alerte D16 (mandat exclusif sans visite depuis 30 jours, qui surveille le mandat EN COURS) : celle-ci audite la vente CONCLUE. Mise en œuvre : vue d'alerte dans l'entrepôt (fait_vente porte déjà nb_visites), phase 3.
 
 ## D13 — Mandat renouvelé : droit et délai (question posée au PO)
 
@@ -109,6 +111,13 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 - **Question au PO.** L'assiette de la rémunération du chasseur est-elle le brut de l'énoncé ou les honoraires HT ? L'énoncé ne parle pas de TVA. Tant que ce n'est pas tranché, l'OLTP ne change pas.
 - **Effet.** ETL et vues de l'entrepôt (PR #15), dossier OLAP §2.
 
+## D20 — Rémunération du chasseur seulement après encaissement (12/10)
+
+- **Problème (question de Matthieu).** Si le client conteste les honoraires d'un achat hors dispositif (enquête, décision judiciaire), la direction ne veut pas qu'une facturation du chasseur soit possible avant l'issue. La règle écrite (Readme, parcours du chasseur, étape 10 : l'entreprise reçoit les honoraires, puis le chasseur est prévenu du paiement de sa rémunération) n'était portée par **aucune contrainte** : la base acceptait une rémunération sur un acte non encaissé.
+- **Décision.** Garde S28 : une rémunération n'est acceptée que si les honoraires de l'acte sont encaissés ; annuler l'encaissement d'un acte déjà rémunéré est refusé. Tant que le litige dure, l'entreprise n'encaisse pas, donc ne rémunère pas. Enregistrer la vente et tracer sa source restent possibles dès la connaissance du fait : c'est la mémoire du dossier, pas un paiement.
+- **Question au PO (non bloquante).** Faut-il un état « contesté / en litige » visible sur l'acte, pour que la direction voie ces dossiers dans l'entrepôt ?
+- **Effet.** v8.43 (PR #16) : triggers S28 (`tg_remuneration_encaissement`, `tg_acte_encaissement_remunere`), tests T36 et T37, ADR-053 item 4 quater. Verrou de l'acte pendant la vérification et test de concurrence à deux sessions (revue d'Angeline Gomez, 13/10).
+
 ## Décision de GO sur l'étude d'opportunité (pour information)
 
 - **Présenté.** Recommandation « GO avec trois réserves » (PO-1, PO-4, PO-11) ; ROI 76 % la première année, 268,5 % sur 3 ans ; mode de réalisation : équipe interne.
@@ -120,6 +129,7 @@ Légende des statuts : **actée** (décision de l'équipe, présentée pour info
 | --- | --- | --- |
 | Remplacer les réponses simulées par les réponses réelles | Matthieu | après le point du 12/10 |
 | Mettre en œuvre D13 (gardes S24 et S26) et la traçabilité D16 dans la v8.42 | Matthieu (PR #14) | avant le merge |
-| Implémenter D10 et D12 dans l'alimentation OLAP, avec tests | Matthieu | phase 3 |
+| ~~Implémenter D10 et D12 dans l'alimentation OLAP, avec tests~~ | Matthieu | **fait** — PR #15 (fonction `olap.f_nb_visites`, ventes hors dispositif exclues de KPI-3), mergée le 12/10 |
 | Reporter D15 (dérogation tracée) dans le contrat d'API | équipe | phase 4 |
 | Synthèse de l'étude d'opportunité en 2 pages | Matthieu | semaine du 12/10 |
+| Alerte « vente conclue sans visite » dans l'entrepôt (complément D12, proposé par Matthieu le 13/10) | Matthieu | phase 3 |

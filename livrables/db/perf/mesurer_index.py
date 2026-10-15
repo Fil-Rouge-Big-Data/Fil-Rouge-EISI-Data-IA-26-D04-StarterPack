@@ -150,6 +150,7 @@ def main():
           "| `ix_visite_proposition_date` (id_proposition, date_visite) **partiel** `realisee` | Q4 | rendez-vous réalisés d'une proposition (D10) |",
           "| `ix_offre_proposition`, `ix_compromis_offre` | Q1 | chaîne de vente remontée par `v_acte_mandat` et `v_mandat` |",
           "", "## Ce qu'il faut retenir", "",
+          "- Ces index font partie du socle depuis la v8.43 (`01_ddl.sql`) ; le script les retire avant la mesure « avant » puis les recrée.",
           "- Les gains les plus nets viennent des **clés étrangères non indexées** : sans index, chaque jointure parent → enfants balaie la table enfant entière.",
           "- Les **index partiels** répondent à une requête précise avec un coût d'écriture et de stockage réduit (ENF-26).",
           "- **Coût des index** : chaque insertion de proposition, visite ou annonce met à jour un index de plus ; sur les volumes cibles (5 000 mandats par semaine, ENF-03), le partitionnement par date des annonces et propositions (PO-15) est la suite logique, à chiffrer dans la note 3V.",

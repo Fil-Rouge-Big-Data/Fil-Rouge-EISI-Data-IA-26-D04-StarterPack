@@ -582,7 +582,7 @@ CREATE TABLE acte (
     montant_vente   d_montant NOT NULL CHECK (montant_vente > 0),
     honoraires_fixe d_montant,
     honoraires_taux d_taux,
-    -- B2/US07 : encaissement des honoraires par l'entreprise. C'est le fait
+    -- Readme, parcours du chasseur, étape 10 (et B2/US07) : encaissement des honoraires par l'entreprise. C'est le fait
     -- générateur de la rémunération du chasseur (« quand ce paiement est enregistré »)
     -- et, pour une vente, de la concrétisation du parrainage (règlement art. 9).
     honoraires_encaisses   boolean NOT NULL DEFAULT false,
@@ -814,5 +814,21 @@ CREATE TABLE objectif (
     date_fixation   timestamptz NOT NULL,
     PRIMARY KEY (id_utilisateur, code_indicateur, id_periode)
 );
+
+-- ============================================================
+-- Index justifiés par la mesure (note d'indexation, livrables/documentation/perf/) — v8.43.
+-- PostgreSQL n'indexe pas les clés étrangères : sans ces index, chaque jointure parent -> enfants
+-- balaie la table enfant. Chaque index répond à une requête mesurée (ENF-26) ; index partiels quand
+-- le filtre est stable. Gains mesurés sur 20 000 mandats : x54 (mandats d'un chasseur), x39 (critères
+-- S3/S4), x3 (matching, avec random_page_cost = 1.1), x359 (rendez-vous d'un mandat, D10).
+-- ============================================================
+CREATE INDEX ix_mandat_chasseur_signature ON mandat (id_chasseur, date_signature);
+CREATE INDEX ix_remuneration_chasseur_date ON remuneration_chasseur (id_chasseur, date_calcul);
+CREATE INDEX ix_bien_zone_type ON bien (id_zone, type_bien);
+CREATE INDEX ix_annonce_active_bien_prix ON annonce (id_bien, prix) WHERE statut = 'active';
+CREATE INDEX ix_proposition_mandat ON proposition (id_mandat);
+CREATE INDEX ix_visite_proposition_date ON visite (id_proposition, date_visite) WHERE realisee;
+CREATE INDEX ix_offre_proposition ON offre_acquisition (id_proposition);
+-- compromis(id_offre) : pas d'index supplémentaire, la contrainte UNIQUE en crée déjà un (revue PR #16).
 
 COMMIT;

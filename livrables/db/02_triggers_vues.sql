@@ -32,6 +32,9 @@ CREATE OR REPLACE FUNCTION f_mandat_succession() RETURNS trigger AS $$
 DECLARE deb_prec date;
 BEGIN
     IF NEW.id_mandat_precedent IS NOT NULL THEN
+        IF NEW.id_mandat_precedent = NEW.id_mandat THEN
+            RAISE EXCEPTION 'ADR-048 : un mandat ne peut pas etre son propre precedent (%)', NEW.id_mandat;
+        END IF;
         SELECT date_debut INTO deb_prec FROM mandat WHERE id_mandat = NEW.id_mandat_precedent;
         IF NEW.date_debut < deb_prec + INTERVAL '6 months' THEN
             RAISE EXCEPTION 'ADR-048 : un renouvellement doit debuter >= 6 mois apres le mandat precedent (debut precedent %, debut nouveau %)', deb_prec, NEW.date_debut;
@@ -334,6 +337,99 @@ CREATE CONSTRAINT TRIGGER tg_acte_reverification
     AFTER UPDATE OF id_mandat, id_compromis, date_signature ON acte
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION f_reverifier_apres_acte();
+
+-- S27 (revue de la PR #14, point A) : on ne résilie pas un mandat qui a abouti. Sans cette garde, une
+-- résiliation posée APRÈS l'acte faisait passer le mandat en « résilié » dans v_mandat (la résiliation y
+-- est testée avant le succès) alors que le chasseur a été payé. Cause traitée, pas le symptôme.
+CREATE OR REPLACE FUNCTION f_mandat_resiliation_apres_acte() RETURNS trigger AS $$
+BEGIN
+    IF NEW.date_resiliation IS NOT NULL AND f_mandat_clos_par_acte(NEW.id_mandat) THEN
+        RAISE EXCEPTION 'S27 : résiliation refusée, le mandat % a déjà abouti à un acte', NEW.id_mandat;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_mandat_resiliation_apres_acte
+    BEFORE INSERT OR UPDATE OF date_resiliation, type_resiliation ON mandat
+    FOR EACH ROW EXECUTE FUNCTION f_mandat_resiliation_apres_acte();
+
+-- S27, sens inverse (revue de la PR #16, Thérèse Nguyen, point 1) : la garde ci-dessus ne jouait que sur
+-- l'écriture du mandat. Résiliation saisie d'abord (1er mars), puis acte appris après coup et daté d'avant
+-- (1er février) : S24 l'acceptait (la résiliation est postérieure à l'acte), la rémunération suivait, et
+-- v_mandat affichait « résilié » pour un mandat payé. Règle : un acte ne peut pas être rattaché à un mandat
+-- résilié ; l'agence annule d'abord la résiliation, dans la même transaction si elle veut, puis saisit l'acte.
+-- Le mandat en vigueur est verrouillé (FOR SHARE) : une résiliation lancée en même temps attend la fin de
+-- cette transaction, puis S27 (sens direct) la refuse car l'acte est désormais visible.
+-- Contrat d'isolation (point 2 de la même revue) : ces garanties, comme S28, valent en READ COMMITTED, le
+-- niveau par défaut de PostgreSQL, celui de la recette et de l'application. Chaque ordre SQL d'un trigger y
+-- prend un instantané frais après l'attente du verrou. En REPEATABLE READ, la transaction qui attend garde son
+-- instantané : elle doit alors échouer en erreur de sérialisation et être rejouée. Ce mode n'est pas supporté
+-- par les tests ; l'application ne doit pas l'activer pour ces écritures.
+CREATE OR REPLACE FUNCTION f_acte_mandat_resilie() RETURNS trigger AS $$
+DECLARE v_racine uuid; v uuid; v_resil date;
+BEGIN
+    IF NEW.id_mandat IS NOT NULL THEN
+        v_racine := NEW.id_mandat;                              -- acte hors dispositif
+    ELSE
+        SELECT p.id_mandat INTO v_racine                        -- chaîne compromis -> offre -> proposition
+        FROM compromis co
+        JOIN offre_acquisition o ON o.id_offre = co.id_offre
+        JOIN proposition p       ON p.id_proposition = o.id_proposition
+        WHERE co.id_compromis = NEW.id_compromis;
+    END IF;
+    IF v_racine IS NULL THEN RETURN NEW; END IF;
+    v := f_mandat_en_vigueur_chaine(v_racine, NEW.date_signature);
+    IF v IS NULL THEN RETURN NEW; END IF;                       -- droit fermé : S24 / S26 jugent
+    SELECT date_resiliation INTO v_resil FROM mandat WHERE id_mandat = v FOR SHARE;
+    IF v_resil IS NOT NULL THEN
+        RAISE EXCEPTION 'S27 : acte % refusé, le mandat % est résilié le % : annuler la résiliation avant d''enregistrer l''acte', NEW.id_acte, v, v_resil;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_acte_mandat_resilie
+    BEFORE INSERT OR UPDATE OF id_mandat, id_compromis, date_signature ON acte
+    FOR EACH ROW EXECUTE FUNCTION f_acte_mandat_resilie();
+
+-- S28 / D20 : la rémunération du chasseur n'existe qu'après l'encaissement des honoraires par
+-- l'entreprise. Source : Readme, parcours du chasseur, étape 10 (« une fois que l'entreprise reçoit
+-- les honoraires, le chasseur est prévenu du paiement proche de sa rémunération »). Tant qu'un
+-- litige client bloque l'encaissement (contestation, décision judiciaire attendue), rien ne doit
+-- permettre de payer le chasseur. La règle était écrite (01_ddl.sql, ADR-049) mais portée par
+-- aucune contrainte : la base acceptait une rémunération sur un acte non encaissé.
+-- Concurrence (revue de la PR #16, Angeline Gomez, point A) : la ligne de l'acte est VERROUILLÉE
+-- (FOR SHARE) pendant la vérification. Sans ce verrou, une transaction qui décoche l'encaissement
+-- en même temps ne voit pas la rémunération pas encore validée, et les deux passent (course
+-- reproduite le 13/10). Avec le verrou, la transaction concurrente attend la fin de celle-ci,
+-- puis voit la rémunération et est refusée par le volet symétrique ci-dessous. Le verrou posé par
+-- la clé étrangère (FOR KEY SHARE) ne suffit pas : il ne bloque pas la mise à jour d'une colonne
+-- non clé comme honoraires_encaisses.
+CREATE OR REPLACE FUNCTION f_remuneration_encaissement() RETURNS trigger AS $$
+BEGIN
+    PERFORM 1 FROM acte a WHERE a.id_acte = NEW.id_acte AND a.honoraires_encaisses FOR SHARE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'S28 : rémunération refusée, les honoraires de l''acte % ne sont pas encaissés', NEW.id_acte;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_remuneration_encaissement
+    BEFORE INSERT OR UPDATE OF id_acte ON remuneration_chasseur
+    FOR EACH ROW EXECUTE FUNCTION f_remuneration_encaissement();
+
+-- S28 (volet symétrique) : on n'annule pas l'encaissement d'un acte déjà rémunéré.
+CREATE OR REPLACE FUNCTION f_acte_encaissement_remunere() RETURNS trigger AS $$
+BEGIN
+    IF NOT NEW.honoraires_encaisses
+       AND EXISTS (SELECT 1 FROM remuneration_chasseur rc WHERE rc.id_acte = NEW.id_acte) THEN
+        RAISE EXCEPTION 'S28 : annulation d''encaissement refusée, l''acte % porte déjà une rémunération', NEW.id_acte;
+    END IF;
+    RETURN NEW;
+END; $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER tg_acte_encaissement_remunere
+    BEFORE UPDATE OF honoraires_encaisses ON acte
+    FOR EACH ROW EXECUTE FUNCTION f_acte_encaissement_remunere();
 
 -- ADR-053 / D13 : pour chaque acte, le mandat d'ORIGINE (chaîne de vente ou hors dispositif),
 -- le mandat EN VIGUEUR de sa chaîne à la date de l'acte (celui que rémunère remuneration_chasseur)

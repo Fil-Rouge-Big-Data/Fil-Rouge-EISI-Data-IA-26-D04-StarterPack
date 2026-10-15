@@ -60,7 +60,7 @@ Sans Docker : exporter `SRC_*` / `DST_*`, créer les deux bases, charger
 
 | Batterie | Commande | Résultat |
 |---|---|---|
-| Contraintes DDL (harnais probant) | `python livrables/db/run_tests.py` | 34 rejets, chacun par la contrainte attendue, + 6 valides |
+| Contraintes DDL (harnais probant) | `python livrables/db/run_tests.py` | 40 rejets, chacun par la contrainte ou le trigger attendu, + 6 valides |
 | Sondes (anti-régression intégrité) | `python livrables/db/run_sondes.py` | 12 fermées / 0 ouverte |
 | Migration | `pytest livrables/migration/tests/` | 48 tests |
 | Anonymisation RGPD | `pytest livrables/jobs/anonymisation/` | 8 tests |

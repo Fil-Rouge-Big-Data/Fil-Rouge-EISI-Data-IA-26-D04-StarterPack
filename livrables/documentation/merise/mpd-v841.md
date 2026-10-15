@@ -80,6 +80,7 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 - `tg_acte_compromis_realise` — pas d'acte sur un compromis caduc.
 - `tg_acte_hors_dispositif` — un acte sans compromis référence le mandat exclusif de sa chaîne de renouvellement en vigueur à sa date (S24, ADR-053, D13).
 - `tg_remuneration_mandat_acte` — la rémunération porte sur le mandat de la chaîne en vigueur à la date de l'acte (S25) ; droit fermé si aucun (S26).
+- `tg_mandat_resiliation_apres_acte` — on ne résilie pas un mandat qui a abouti à un acte (S27, v8.43).
 - `tg_mandat_reverification`, `tg_acte_reverification` — déclencheurs de contrainte **différés au commit** : une modification du mandat (exclusivité, dates, résiliation, filiation) ou de l'acte (mandat, compromis, date) est re-contrôlée par les mêmes fonctions, pour qu'un contournement après coup soit impossible.
 
 **Fonctions de chaîne (D13) :** `f_chaine_mandats` (initial + renouvellements ; `ROWS 2` pour que le planificateur choisisse les index), `f_mandat_en_vigueur_chaine` (mandat en vigueur à une date), `f_mandat_initial_chaine` (point de départ du délai S₁), `f_actes_chaine` (actes d'une chaîne trouvés par index) et `f_mandat_clos_par_acte` (vrai si un acte rémunère ce mandat), utilisées par `v_mandat` et `v_demande`. Coût mesuré (note d'indexation) : 1,7 ms par mandat, `v_mandat` complète sur 20 000 mandats en 12,6 s.
@@ -94,7 +95,10 @@ PG16), `date_reference()` (date de contrôle paramétrable par GUC).
 - **Unicités partielles** : `uk_proposition_active` (reproposer un bien après
   baisse de prix) ; les unicités de progression stockée ont disparu (ADR-048).
 - **Exclusions GiST** : `ex_tranche_chevauchement`, `ex_bareme_vigueur`.
-- **FK** : index implicites sur les colonnes référencées à forte jointure.
+- **Clés étrangères** : PostgreSQL ne les indexe pas. Sept index justifiés par la note d'indexation (v8.43) :
+  `ix_mandat_chasseur_signature`, `ix_remuneration_chasseur_date`, `ix_bien_zone_type`, `ix_annonce_active_bien_prix`
+  (partiel, annonces actives), `ix_proposition_mandat`, `ix_visite_proposition_date` (partiel, visites réalisées),
+  `ix_offre_proposition` (`compromis.id_offre` est déjà indexé par sa contrainte UNIQUE : pas d'index en double).
 
 ---
 
@@ -146,8 +150,8 @@ non recalculable qui fait foi dans `v_mandat`. Le cache d'état calculé n'exist
 Vérifié sur PostgreSQL 16.15 (code visant PostgreSQL 18 : le `uuidv7()` natif n'a pas été essayé, le repli
 l'a été) :
 - DDL rejouable : **38 tables, 9 vues, 340 colonnes**.
-- Harnais de contraintes : **34 rejets, chacun par la contrainte attendue**, + 6 écritures valides
-  (v8.42 : T24 à T34, P8 et P9 — achat hors dispositif, chaîne de renouvellement, re-vérification après coup ; ADR-053, D13).
+- Harnais de contraintes : **40 rejets, chacun par la contrainte ou le trigger attendu (code vérifié)**, + 8 écritures valides
+  (v8.42 : T24 à T34, P8 et P9 — achat hors dispositif, chaîne de renouvellement, re-vérification après coup ; v8.43 : T35 à T40, P10 et P11 — résiliation et acte dans les deux ordres, rémunération seulement après encaissement, chemin UPDATE, corrections autorisées — S27, S28/D20).
 - Batterie de **sondes** : 12 fermées, 0 ouverte (hermétiques : mêmes résultats quel que soit l'état de la base).
 - Migration : 153 lignes, 73 anomalies tracées ; 48 tests ; dérivation des états prouvée (le même mandat
   change d'état selon la date de référence).

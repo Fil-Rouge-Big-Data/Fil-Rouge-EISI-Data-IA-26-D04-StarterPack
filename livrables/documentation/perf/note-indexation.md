@@ -28,13 +28,15 @@
 | `ix_annonce_active_bien_prix` (id_bien, prix) **partiel** `statut = 'active'` | Q3 | seules les annonces actives sont candidates ; index petit et toujours pertinent |
 | `ix_proposition_mandat` (id_mandat) | Q1, Q4 | clé étrangère la plus parcourue (mandat → propositions), non indexée par défaut |
 | `ix_visite_proposition_date` (id_proposition, date_visite) **partiel** `realisee` | Q4 | rendez-vous réalisés d'une proposition (D10) |
-| `ix_offre_proposition`, `ix_compromis_offre` | Q1 | chaîne de vente remontée par `v_acte_mandat` et `v_mandat` |
+| `ix_offre_proposition` (et l'index UNIQUE existant de `compromis.id_offre`) | Q1 | chaîne de vente remontée par `v_acte_mandat` et `v_mandat` |
 
 ## Ce qu'il faut retenir
 
+- Ces index font partie du socle depuis la v8.43 (`01_ddl.sql`) ; le script les retire avant la mesure « avant » puis les recrée.
 - Les gains les plus nets viennent des **clés étrangères non indexées** : sans index, chaque jointure parent → enfants balaie la table enfant entière.
 - Les **index partiels** répondent à une requête précise avec un coût d'écriture et de stockage réduit (ENF-26).
 - **Coût des index** : chaque insertion de proposition, visite ou annonce met à jour un index de plus ; sur les volumes cibles (5 000 mandats par semaine, ENF-03), le partitionnement par date des annonces et propositions (PO-15) est la suite logique, à chiffrer dans la note 3V.
+- **Le gain de Q3 dépend du réglage** : avec les index seuls, Q3 passe de 48 à 61 ms (plus lent) ; c'est `random_page_cost = 1.1` qui la fait tomber à 18 ms. Ce réglage est à revalider sur les données réelles et sur plusieurs requêtes avant d'être posé en production (revue de la PR #16).
 - **Réglage du planificateur** : `random_page_cost` vaut 4 par défaut (disque mécanique). Sur stockage SSD (bases managées de l'étude), 1.1 rend les accès par index moins chers aux yeux du planificateur ; c'est ce qui fait basculer Q3 d'une jointure par hachage avec parcours complet des annonces vers des boucles imbriquées sur index. À poser dans la configuration de l'instance, pas dans les requêtes.
 - Limite : jeu synthétique uniforme (distribution régulière des biens par zone, des mandats par chasseur). Sur des données réelles, les statistiques (`ANALYZE`) et la sélectivité changent ; les index sont à **revalider** sur les données de production.
 

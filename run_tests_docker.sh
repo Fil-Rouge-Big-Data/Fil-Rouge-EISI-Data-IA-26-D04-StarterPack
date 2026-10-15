@@ -61,6 +61,10 @@ PGHOST="$HOTE" PGPORT="$PORT" PGUSER="$USER" PGDATABASE="$DB" PGPASSWORD="$POSTG
   "$PY" livrables/db/run_sondes.py
 
 echo
+echo "Concurrence des gardes S27 et S28 (deux sessions simultanees, READ COMMITTED)..."
+CONTAINER="$CONTAINER" DB="$DB" DBUSER="$USER" bash livrables/db/concurrence/test_concurrence_s27_s28.sh
+
+echo
 echo "Tests d'anonymisation RGPD..."
 REQUIRE_DB=1 DST_PGHOST="$HOTE" DST_PGPORT="$PORT" DST_PGUSER="$USER" DST_PGDATABASE="$DB" DST_PGPASSWORD="${POSTGRES_PASSWORD:-}" \
   "$PY" -m pytest livrables/jobs/anonymisation -q

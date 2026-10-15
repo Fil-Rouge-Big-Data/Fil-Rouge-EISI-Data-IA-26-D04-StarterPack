@@ -1,6 +1,7 @@
 -- ============================================================
--- 02_index.sql — Index proposés après mesure (note d'indexation). Chacun est justifié par UNE requête
--- de 03_requetes.sql ; principe d'éco-conception ENF-26 : pas d'index sans requête qui le demande.
+-- 02_index.sql — Index justifiés par la mesure (note d'indexation). Depuis la v8.43 ils font partie de
+-- 01_ddl.sql ; ce fichier sert au script de mesure, qui les retire puis les recrée pour comparer
+-- « avant » et « après ». Principe d'éco-conception ENF-26 : pas d'index sans requête qui le demande.
 -- PostgreSQL n'indexe PAS automatiquement les clés étrangères : seules les clés primaires et les
 -- unicités le sont. Les jointures « parent -> enfants » (mandat -> propositions, proposition -> visites,
 -- chasseur -> mandats / rémunérations) partent donc d'un parcours séquentiel sans ces index.
@@ -21,6 +22,6 @@ CREATE INDEX IF NOT EXISTS ix_annonce_active_bien_prix ON annonce (id_bien, prix
 CREATE INDEX IF NOT EXISTS ix_proposition_mandat ON proposition (id_mandat);
 CREATE INDEX IF NOT EXISTS ix_visite_proposition_date ON visite (id_proposition, date_visite) WHERE realisee;
 CREATE INDEX IF NOT EXISTS ix_offre_proposition ON offre_acquisition (id_proposition);
-CREATE INDEX IF NOT EXISTS ix_compromis_offre ON compromis (id_offre);
+-- compromis(id_offre) est déjà indexé par sa contrainte UNIQUE : index retiré (revue PR #16, Thérèse Nguyen).
 
 ANALYZE;

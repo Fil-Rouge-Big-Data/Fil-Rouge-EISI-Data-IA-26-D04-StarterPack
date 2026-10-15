@@ -19,6 +19,14 @@ score global : le gel doit être **reconstituable juridiquement** même si les r
 de calcul évoluent. Une annulation exceptionnelle est un **flag daté** + motif
 (`date_annulation`, `motif_annulation`), pas un statut (cohérent ADR-048).
 
+**Instants, depuis S28 (revue de la PR #16, Thérèse Nguyen, point 5).** Quatre dates ne doivent pas être
+confondues. La **date de référence du calcul** est la date de l'acte : barème en vigueur, notes de
+performance et ancienneté sont ceux de ce jour-là, et c'est ce que le gel conserve. La **date d'exécution**
+(`date_calcul`) peut être bien postérieure, puisque la ligne n'est insérée qu'après l'**encaissement** des
+honoraires (S28, D20) ; l'application qui calcule après encaissement doit donc reconstituer les données à la
+date de l'acte, et S28 ne vérifie pas cette reconstitution, seulement la condition d'insertion. La
+**facturation** et le **paiement** sont des événements ultérieurs, portés par `facture_chasseur`.
+
 ### 2.2 Borne de taux garantie (R2)
 `CHECK (taux_final BETWEEN 20 AND 60)` : la borne métier (US 00/07) est **garantie
 par le SGBD**, plus un simple commentaire. Ajustable par migration de contrainte si
@@ -107,38 +115,14 @@ BC01 (décisions tracées), BC03 (intégrité SGBD, gel juridique), BC05 (donné
 par date : deux personnes (le chasseur et le client, un couple d'acquéreurs) peuvent visiter le même
 bien le même jour et produire chacune une ligne.
 
-**Convention retenue.** En base, une visite est un **fait par participant** : chaque personne présente
-produit une ligne. Pour le score, en revanche, l'unité est le **rendez-vous** (révision v8.42) :
+**Convention initiale (v8.41).** Une visite est un **fait par participant** : chaque personne présente
+produit une ligne. Le score de visites (`score_visites`, pondération 25) comptait les lignes de visite des
+clients sur les propositions du mandat, sur les 12 mois glissants précédant l'acte.
 
-| Qui est présent | Rendez-vous | Compte dans `score_visites` ? |
-| --- | --- | --- |
-| Chasseur seul (reconnaissance) | 1 | **Non** : travail préparatoire, il porte la note d'avis |
-| Chasseur + 1 acquéreur | 1 | Oui |
-| Chasseur + couple d'acquéreurs | 1 | Oui (et non 2) |
-| Acquéreur(s) seul(s), avec le vendeur ou son agent | 1 | Oui |
-
-Le score de visites du chasseur (`score_visites`, pondération 25) se calcule en comptant les
-**rendez-vous réalisés** où au moins un **acquéreur de la demande** est présent, sur les propositions du
-mandat, sur les 12 mois glissants précédant l'acte :
-
-```sql
-SELECT count(DISTINCT (v.id_proposition, v.date_visite))
-FROM visite v
-JOIN proposition p        ON p.id_proposition = v.id_proposition
-JOIN demande_acquereur da ON da.id_demande = p.id_demande
-                         AND da.id_client = v.id_visiteur
-WHERE p.id_mandat = :id_mandat
-  AND v.realisee = true
-  AND v.date_visite BETWEEN :date_acte - INTERVAL '12 months' AND :date_acte
-```
-
-- `count(DISTINCT …)` : un couple produit deux lignes pour un seul rendez-vous ; un `count(*)` le
-  compterait deux fois (5 visites en couple → 10 → note ≈ 47 au lieu de 80).
-- `demande_acquereur` plutôt qu'un test sur `client` : un chasseur peut aussi être client (cumul) ; il
-  ne doit pas être compté comme acquéreur de la demande sur laquelle il travaille.
-- Limite : `date_visite` n'a pas d'heure ; deux rendez-vous sur le même bien le même jour comptent pour un.
-- Vente hors dispositif : même requête (visites réelles sur les propositions du mandat) ; note neutre de
-  50 si elle renvoie 0 (§2.3).
+**Révisée en v8.42 — voir l'ADR-053 §5 bis.** La revue de la PR #15 a montré qu'un `count(*)` comptait double
+une visite en couple ; le comptage se fait désormais par **rendez-vous** d'acquéreurs de la demande. Le statut
+« Accepté » de cet ADR vaut pour le principe (fait par participant, pas d'unicité en base) ; la règle de
+comptage en vigueur est celle de l'ADR-053.
 
 Ce comptage est une **règle OLAP** (ou du moteur de calcul de la rémunération), pas une contrainte
 d'intégrité. La base ne porte pas de `UNIQUE` sur `(id_proposition, date_visite)` : cela interdirait
