@@ -11,11 +11,14 @@ Les cinq indicateurs de l'étude d'opportunité (§2.3), tels que validés avec 
 
 | KPI | Question | Vue de restitution |
 |---|---|---|
-| KPI-1 | Combien de demandes deviennent mandats, visites, offres, actes ? | `v_kpi_conversion_funnel` |
-| KPI-2 | Quand encaisse-t-on ? Quels mandats dorment ? | `v_kpi_mandats_cycle_vie` (dont mandats sans visite depuis 30 jours, D16) |
+| KPI-1 | Combien de demandes deviennent mandats, visites, offres, actes ? | `v_kpi_conversion_funnel` (jusqu'à l'acte depuis le 13/10) |
+| KPI-2 | Quand encaisse-t-on ? Quels mandats dorment ? | `v_kpi_tresorerie` (encaissé, en attente chez le notaire, prévu par les compromis) ; `v_kpi_mandats_cycle_vie` (dont mandats sans visite depuis 30 jours, D16) |
 | KPI-3 | Combien de visites avant une vente ? | `v_kpi_performance_chasseurs.visites_moyennes_par_vente` |
 | KPI-4 | Quelle marge, quelle rémunération par chasseur ? | `v_kpi_chiffre_affaires_mensuel`, `v_kpi_performance_chasseurs` |
 | KPI-5 | Quels secteurs performent ? | `v_kpi_analyse_geographique` |
+| Complément | Pourquoi perd-on des mandats ? Les biens proposés plaisent-ils ? | `v_kpi_motifs_resiliation` ; `v_kpi_performance_chasseurs.taux_acceptation_propositions_pct` |
+
+> **Relecture du 13/10/2026.** En comparant les vues aux questions de l'étude (§2.3), deux promesses n'étaient pas tenues : KPI-1 s'arrêtait au mandat, et KPI-2 ne disait rien de l'encaissement. Elles sont corrigées, avec deux compléments dont les données existaient déjà dans l'OLTP.
 
 ## 2. Principes (ADR)
 
@@ -149,15 +152,16 @@ erDiagram
 
 | Fait | Grain | Mesures | Règles |
 |---|---|---|---|
-| `fait_vente` | un acte | montant, honoraires brut et **HT**, part chasseur, marge, taux de marge, délais, visites, propositions | marge HT = honoraires HT − part chasseur (D19) ; délai mandat → acte depuis le mandat **initial** (D13) ; visites = rendez-vous d'acquéreurs sur la chaîne du mandat (D10) ; deux zones : `id_zone` (bien vendu), `id_zone_recherche` (mandat) |
+| `fait_vente` | un acte | montant, honoraires brut et **HT**, part chasseur, marge, taux de marge, délais, visites, propositions, **encaissement** (drapeau, date, délai acte → encaissement) | marge HT = honoraires HT − part chasseur (D19) ; délai mandat → acte depuis le mandat **initial** (D13) ; visites = rendez-vous d'acquéreurs sur la chaîne du mandat (D10) ; deux zones : `id_zone` (bien vendu), `id_zone_recherche` (mandat) |
 | `fait_remuneration_chasseur` | une rémunération | assiette, cinq notes, score, taux, montant, `est_annulee` | copie du gel OLTP (ADR-049) ; `est_hors_dispositif` |
-| `fait_mandat_cycle` | un mandat | durée effective, propositions, visites, `jours_sans_visite` | état lu dans `v_mandat` ; filiation `id_mandat_precedent` |
-| `fait_activite_demande` | une demande | délais d'affectation et de qualification, versions de critères, `a_abouti_mandat` | état lu dans `v_demande` |
+| `fait_mandat_cycle` | un mandat | durée effective, propositions (dont soumises au client et retenues), visites, `jours_sans_visite`, motif de résiliation | état lu dans `v_mandat` ; filiation `id_mandat_precedent` ; résilié sans motif (état repris) = `non_renseigne` (ADR-051) ; retenue = statut `retenu_visite`, visite réalisée ou offre |
+| `fait_activite_demande` | une demande | délais d'affectation et de qualification, versions de critères, `a_abouti_mandat`, `a_eu_visite`, `a_eu_offre`, `a_abouti_acte` | état lu dans `v_demande` ; visite = rendez-vous avec un acquéreur (D10) ; acte = les deux origines (ADR-053) |
+| `fait_compromis` | un compromis | montant de l'offre, honoraires **estimés** HT, date d'acte prévue | état lu dans `v_compromis` ; estimation = forfait + taux du mandat × offre, convertie en HT (D19) ; le montant réel est celui de l'acte |
 
 ## 4. Alimentation (`02_etl_chargement.sql`)
 
 - **ELT en SQL ensembliste**, une transaction, `INSERT … ON CONFLICT DO UPDATE` sur la clé naturelle de chaque table : rejouable à l'identique (test d'idempotence), sans suppression.
-- **Ordre** : dimensions (temps, chasseur, gestionnaire, zone, bien, client), puis faits (mandats, demandes, ventes, rémunérations).
+- **Ordre** : dimensions (temps, chasseur, gestionnaire, zone, bien, client), puis faits (mandats, demandes, ventes, rémunérations, compromis).
 - **Lignage** :
 
 ```
@@ -166,6 +170,7 @@ mandat, mandat_reprise, proposition, visite ──▶ v_mandat ─────�
 demande, affectation, demande_version ───────▶ v_demande ──────────────▶ fait_activite_demande
 acte (2 origines), compromis…proposition ────▶ v_acte_mandat, v_honoraires ▶ fait_vente
 remuneration_chasseur ───────────────────────▶ (copie du gel) ──────────▶ fait_remuneration_chasseur
+compromis, offre, mandat ────────────────────▶ v_compromis ─────────────▶ fait_compromis
 chasseur, gestionnaire, zone, bien, client ──▶ (tranches, drapeaux) ────▶ dimensions
 ```
 
@@ -178,16 +183,18 @@ chasseur, gestionnaire, zone, bien, client ──▶ (tranches, drapeaux) ──
 | Vue | Public | Ce qu'elle donne |
 |---|---|---|
 | `v_kpi_chiffre_affaires_mensuel` | direction, DAF | ventes (dont hors dispositif), volume, honoraires, part chasseurs, marge, taux de marge, panier moyen, délai moyen mandat → acte |
-| `v_kpi_performance_chasseurs` | direction commerciale | mandats (actifs, clos en succès), ventes, honoraires HT, rémunération hors annulations, cinq notes moyennes, visites moyennes par vente (hors ventes hors dispositif, D12), taux de transformation — trois faits agrégés séparément |
-| `v_kpi_conversion_funnel` | pôle gestion | demandes reçues, en attente, prises en charge, transformées, sans suite ; délais humains (hors compte technique) |
+| `v_kpi_performance_chasseurs` | direction commerciale | mandats (actifs, clos en succès), ventes, honoraires HT, rémunération hors annulations, cinq notes moyennes, visites moyennes par vente (hors ventes hors dispositif, D12), taux de transformation, **taux d'acceptation des biens proposés** — trois faits agrégés séparément |
+| `v_kpi_conversion_funnel` | pôle gestion | demandes reçues, en attente, prises en charge, transformées en mandat, avec visite, avec offre, abouties à un acte, sans suite ; taux mandat et taux acte ; délais humains (hors compte technique). Un achat hors dispositif atteint l'acte sans visite ni offre : l'entonnoir n'est pas strictement décroissant |
 | `v_kpi_mandats_cycle_vie` | juridique, direction | répartition par état, exclusivité, **mandats dormants** (actifs, > 30 jours sans visite), durée, propositions et visites moyennes |
+| `v_kpi_tresorerie` | DAF, direction | par mois : honoraires **encaissés** (délai moyen acte → encaissement), **en attente chez le notaire** (acte signé, argent pas reçu ; ancienneté), **prévus** par les compromis signés au mois de l'acte prévu (estimation). Trois branches agrégées séparément |
+| `v_kpi_motifs_resiliation` | direction commerciale | mandats résiliés par motif : nombre, dont exclusifs, part, durée avant résiliation, visites |
 | `v_kpi_analyse_geographique` | développement | par zone **recherchée** : mandats engagés, ventes de ces mandats, taux de succès ; par zone **du bien** : ventes, volume, honoraires HT, marge. Les deux notions sont séparées : le taux de succès compare mandats et ventes sur la même zone |
 
 ## 6. Tests (`tests/test_olap_pipeline.py`)
 
 | Test | Vérifie | Jeu de test (seed) | Données reprises (migration) |
 |---|---|---|---|
-| structure | 6 dimensions, 4 faits, 5 vues | ✅ | ✅ |
+| structure | 6 dimensions, 5 faits, 7 vues | ✅ | ✅ |
 | idempotence | rejouer l'ETL ne change aucun comptage | ✅ | ✅ |
 | réconciliation mandats | volume et état identiques à `v_mandat` (RB2) | ✅ | ✅ 18 mandats : 11 échus, 3 clos en succès, 2 actifs, 2 résiliés |
 | réconciliation ventes | comptage **et** montants identiques à l'OLTP (RB2) | ✅ | ✅ (0 vente reprise) |
@@ -198,8 +205,14 @@ chasseur, gestionnaire, zone, bien, client ──▶ (tranches, drapeaux) ──
 | D13 / ADR-053 | chaque vente rattachée au mandat en vigueur et au mandat initial ; une vente de la chaîne a toujours un bien | ✅ | ✅ |
 | vues sans multiplication | sommes des vues (CA, rémunération, par chasseur et par zone) = sommes brutes des faits ; un mandat de plus sans vente ne change pas le CA du chasseur | ✅ | ✅ |
 | honoraires HT (D19) | brut = assiette OLTP ; HT = brut / (1 + TVA) si le mandat est TTC | ✅ | — (0 vente reprise) |
+| encaissement | drapeau et délai identiques à l'acte | ✅ | — (0 vente reprise) |
+| compromis | volume et état identiques à `v_compromis` ; honoraires estimés recalculés depuis le mandat | ✅ | — |
+| trésorerie sans double compte | encaissé + en attente = honoraires des ventes ; prévu = compromis signés | ✅ | ✅ |
+| compromis en cours | un compromis signé apparaît au mois de l'acte prévu, un caduc n'apparaît pas | ✅ | ✅ |
+| entonnoir jusqu'à l'acte | demandes abouties à un acte identiques à l'OLTP ; pas d'offre sans mandat | ✅ | ✅ |
+| motifs et acceptation | tout mandat résilié a un motif ; retenues ≤ soumises, soumises identiques à l'OLTP | ✅ | ✅ |
 
-Résultat au 12/10/2026 (PostgreSQL 16.15) : **12 tests, 11 réussis + 1 sauté** sur le jeu de test (pas de compte technique) ; sur les données reprises, le test D10 et le test HT sont sautés faute de proposition et de vente reprises. Commande : `./run_tests_docker.sh` (dernière étape), ou `pytest livrables/olap/tests` avec les variables `PG*`.
+Résultat au 13/10/2026 (PostgreSQL 16.15) : **18 tests, 17 réussis + 1 sauté** sur le jeu de test (pas de compte technique) ; sur les données reprises, le test D10 et le test HT sont sautés faute de proposition et de vente reprises. Commande : `./run_tests_docker.sh` (dernière étape), ou `pytest livrables/olap/tests` avec les variables `PG*`.
 
 ## 7. Limites et suites
 
@@ -208,6 +221,8 @@ Résultat au 12/10/2026 (PostgreSQL 16.15) : **12 tests, 11 réussis + 1 sauté*
 - **Historisation des dimensions** : type 1 (écrasement). Les changements de chasseur ou de zone ne sont pas historisés (pas de SCD 2) : décision à acter par ADR en phase 3.
 - **Index de la note d'indexation** : mesurés et justifiés, ils ne sont pas encore dans `01_ddl.sql` (la note mesure, le DDL décide) ; leur ajout au socle est prévu dans la PR suivante.
 - **D13** : la lecture « chaîne de renouvellement » est appliquée ; elle attend la confirmation du Product Owner (journal des décisions).
+- **Trésorerie prévisionnelle** : les honoraires des compromis sont une estimation d'après le mandat ; un compromis sans date d'acte prévue apparaît « non daté ». Le seed ne contient aucun compromis en cours : la branche « prévu » est vérifiée par un test sur des faits temporaires.
+- **Pistes non retenues en phase 2** : la négociation obtenue sur le prix affiché (seul le dernier prix d'annonce est conservé, souvent honoraires compris : la mesure serait biaisée) ; le lien entre le score de matching et la vente (le score sera produit par le matching de la phase 4).
 
 ## 8. Rattachement RNCP40573
 

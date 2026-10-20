@@ -4,6 +4,9 @@
 -- Références : ADR-025 (scission OLTP/OLAP), ADR-036 (frontière des indicateurs),
 --              ADR-049 / ADR-052 (rémunération gelée), ADR-051 (état repris),
 --              ADR-053 (acte à double origine), journal des décisions D10, D12, D13.
+-- Relecture du 13/10 face aux promesses de l'étude (§2.3) : KPI-1 prolongé jusqu'à l'acte,
+-- KPI-2 complété par la trésorerie (encaissement, compromis en cours), motifs de résiliation,
+-- taux d'acceptation des propositions.
 -- ============================================================
 
 CREATE SCHEMA IF NOT EXISTS olap;
@@ -153,7 +156,12 @@ CREATE TABLE IF NOT EXISTS olap.fait_vente (
     delai_depot_a_acte_jours    integer,
     delai_mandat_a_acte_jours   integer,                 -- depuis le mandat initial (D13)
     nb_visites_effectuees       integer NOT NULL DEFAULT 0,   -- rendez-vous d'acquéreurs (D10), chaîne du mandat
-    nb_propositions_recues      integer NOT NULL DEFAULT 0
+    nb_propositions_recues      integer NOT NULL DEFAULT 0,
+
+    -- KPI-2 trésorerie : l'argent est-il arrivé ? (S28/D20 : pas de rémunération avant encaissement)
+    est_honoraires_encaisses    boolean NOT NULL DEFAULT false,
+    id_date_encaissement        integer REFERENCES olap.dim_temps(id_temps),
+    delai_acte_a_encaissement_jours integer                  -- NULL tant que non encaissé
 );
 
 -- Fait 2 : rémunération gelée (copie des composantes figées à l'acte, ADR-049 / ADR-052).
@@ -202,8 +210,12 @@ CREATE TABLE IF NOT EXISTS olap.fait_mandat_cycle (
     est_resilie                 boolean NOT NULL DEFAULT false,
     est_echu                    boolean NOT NULL DEFAULT false,
 
+    type_resiliation            varchar(30),             -- motif d'une résiliation datée ; 'non_renseigne' si état repris sans motif (ADR-051)
+
     duree_effective_jours       integer NOT NULL,
     nb_propositions             integer NOT NULL DEFAULT 0,
+    nb_propositions_soumises    integer NOT NULL DEFAULT 0,   -- montrées au client (soumis, retenu_visite, refuse_client)
+    nb_propositions_retenues    integer NOT NULL DEFAULT 0,   -- retenues par le client : statut retenu_visite, visite réalisée ou offre
     nb_visites                  integer NOT NULL DEFAULT 0,   -- rendez-vous d'acquéreurs (D10), ce mandat seul
     jours_sans_visite           integer                       -- alerte « mandat dormant » (D16, étude §6.2)
 );
@@ -223,7 +235,28 @@ CREATE TABLE IF NOT EXISTS olap.fait_activite_demande (
     delai_affectation_heures    numeric(8,2),
     delai_qualification_jours   numeric(8,2),
     a_abouti_mandat             boolean NOT NULL DEFAULT false,
+    -- KPI-1 complet (étude §2.3) : demande -> mandat -> visite -> offre -> acte
+    a_eu_visite                 boolean NOT NULL DEFAULT false,   -- au moins un rendez-vous réalisé avec un acquéreur de la demande (D10)
+    a_eu_offre                  boolean NOT NULL DEFAULT false,
+    a_abouti_acte               boolean NOT NULL DEFAULT false,   -- y compris achat hors dispositif (ADR-053)
     nb_versions_criteres        integer NOT NULL DEFAULT 1
+);
+
+-- Fait 5 : compromis (KPI-2, trésorerie prévisionnelle). Un compromis signé et non caduc annonce un acte,
+-- donc des honoraires à venir, 10 à 14 semaines plus tard (étude §2.3). Les honoraires sont ESTIMÉS
+-- d'après le mandat qui cadre la proposition (forfait + taux x montant de l'offre, même formule que
+-- v_honoraires), convertis en HT selon la base du mandat (D19). Le montant réel est celui de l'acte.
+CREATE TABLE IF NOT EXISTS olap.fait_compromis (
+    id_fait                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_compromis                uuid NOT NULL UNIQUE,
+    id_date_signature           integer NOT NULL REFERENCES olap.dim_temps(id_temps),
+    id_date_acte_prevue         integer REFERENCES olap.dim_temps(id_temps),
+    id_chasseur                 uuid NOT NULL REFERENCES olap.dim_chasseur(id_chasseur),
+    id_zone                     uuid REFERENCES olap.dim_zone(id_zone),
+    id_mandat                   uuid NOT NULL,
+    statut_projete              varchar(10) NOT NULL,    -- signe, realise, caduc (lu dans v_compromis)
+    montant_offre               numeric(12,2) NOT NULL,
+    honoraires_estimes_ht       numeric(10,2) NOT NULL
 );
 
 -- ============================================================
@@ -241,3 +274,4 @@ CREATE INDEX IF NOT EXISTS ix_olap_fait_mandat_statut      ON olap.fait_mandat_c
 CREATE INDEX IF NOT EXISTS ix_olap_fait_demande_depot      ON olap.fait_activite_demande(id_date_depot);
 CREATE INDEX IF NOT EXISTS ix_olap_fait_demande_gest       ON olap.fait_activite_demande(id_gestionnaire);
 CREATE INDEX IF NOT EXISTS ix_olap_fait_demande_statut     ON olap.fait_activite_demande(statut_demande);
+CREATE INDEX IF NOT EXISTS ix_olap_fait_compromis_prevue   ON olap.fait_compromis(id_date_acte_prevue);

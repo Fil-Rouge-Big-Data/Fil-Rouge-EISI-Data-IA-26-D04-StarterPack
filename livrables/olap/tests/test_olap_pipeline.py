@@ -12,7 +12,10 @@ REQUIRE_DB=1 force l'échec (CI). Lancement : voir run_tests_docker.sh.
 7. D10 : une visite en couple compte une fois, la reconnaissance du chasseur ne compte pas ;
 8. D13 / ADR-053 : chaque vente est rattachée au mandat en vigueur et au mandat initial de sa chaîne ;
 9. les vues n'additionnent jamais deux fois une vente (revue PR #15) : sommes des vues = sommes brutes des faits ;
-10. honoraires HT : conversion selon la base du mandat (TTC -> HT), rapprochée de l'OLTP (D19).
+10. honoraires HT : conversion selon la base du mandat (TTC -> HT), rapprochée de l'OLTP (D19) ;
+11. KPI-2 trésorerie : encaissement rapproché de l'acte, compromis rapprochés de v_compromis, honoraires
+    estimés recalculés depuis le mandat, la vue de trésorerie n'additionne aucune vente deux fois ;
+12. KPI-1 jusqu'à l'acte, motifs de résiliation et taux d'acceptation rapprochés de l'OLTP.
 """
 import os
 import pathlib
@@ -56,15 +59,16 @@ def test_structure_etoile(conn):
         cur.execute("SELECT table_name FROM information_schema.views WHERE table_schema='olap'")
         vues = {r[0] for r in cur.fetchall()}
     assert {"dim_temps", "dim_chasseur", "dim_gestionnaire", "dim_zone", "dim_bien", "dim_client"} <= tables
-    assert {"fait_vente", "fait_remuneration_chasseur", "fait_mandat_cycle", "fait_activite_demande"} <= tables
+    assert {"fait_vente", "fait_remuneration_chasseur", "fait_mandat_cycle", "fait_activite_demande", "fait_compromis"} <= tables
     assert {"v_kpi_chiffre_affaires_mensuel", "v_kpi_performance_chasseurs", "v_kpi_conversion_funnel",
-            "v_kpi_mandats_cycle_vie", "v_kpi_analyse_geographique"} <= vues
+            "v_kpi_mandats_cycle_vie", "v_kpi_analyse_geographique", "v_kpi_tresorerie", "v_kpi_motifs_resiliation"} <= vues
 
 
 # 2. idempotence ---------------------------------------------------------------------------------
 def test_etl_idempotent(conn):
     compte = lambda: tuple(_un(conn, f"SELECT count(*) FROM olap.{t}") for t in
-                           ("dim_chasseur", "dim_client", "fait_mandat_cycle", "fait_activite_demande", "fait_vente", "fait_remuneration_chasseur"))
+                           ("dim_chasseur", "dim_client", "fait_mandat_cycle", "fait_activite_demande", "fait_vente",
+                            "fait_remuneration_chasseur", "fait_compromis"))
     avant = compte()
     with conn.cursor() as cur:
         cur.execute(ETL.read_text(encoding="utf-8"))
@@ -229,3 +233,86 @@ def test_ventes_rattachees_a_la_chaine(conn):
     assert incoherents == 0
     sans_bien_mais_dispositif = _un(conn, "SELECT count(*) FROM olap.fait_vente WHERE NOT est_hors_dispositif AND id_bien IS NULL")
     assert sans_bien_mais_dispositif == 0, "une vente de la chaîne de vente a toujours un bien"
+
+
+# 11. KPI-2 trésorerie ---------------------------------------------------------------------------
+def test_encaissement_rapproche_de_l_acte(conn):
+    ecarts = _un(conn, "SELECT count(*) FROM olap.fait_vente f JOIN public.acte a ON a.id_acte = f.id_acte "
+                       "WHERE f.est_honoraires_encaisses <> a.honoraires_encaisses "
+                       "   OR f.delai_acte_a_encaissement_jours IS DISTINCT FROM "
+                       "      CASE WHEN a.honoraires_encaisses THEN a.date_encaissement - a.date_signature END")
+    assert ecarts == 0, "encaissement de l'entrepôt différent de l'acte"
+
+
+def test_compromis_rapproches(conn):
+    oltp = _un(conn, "SELECT count(*) FROM public.compromis")
+    olap = _un(conn, "SELECT count(*) FROM olap.fait_compromis")
+    assert oltp == olap, f"compromis : OLTP={oltp}, OLAP={olap}"
+    etat = _un(conn, "SELECT count(*) FROM olap.fait_compromis f JOIN public.v_compromis vc ON vc.id_compromis = f.id_compromis "
+                     "WHERE f.statut_projete <> vc.statut_calcule")
+    assert etat == 0, "état du compromis différent de v_compromis"
+    # honoraires estimés recalculés indépendamment depuis le mandat (forfait + taux x offre, puis HT)
+    with conn.cursor() as cur:
+        cur.execute("SELECT f.id_compromis, f.honoraires_estimes_ht, m.forfait_honoraires, m.taux_honoraires, o.montant, m.base_honoraires, m.taux_tva "
+                    "FROM olap.fait_compromis f JOIN public.compromis c ON c.id_compromis = f.id_compromis "
+                    "JOIN public.offre_acquisition o ON o.id_offre = c.id_offre JOIN public.mandat m ON m.id_mandat = f.id_mandat")
+        for id_c, estime, forfait, taux, montant, base, tva in cur.fetchall():
+            brut = round(float(forfait or 0) + float(taux or 0) / 100 * float(montant), 2)
+            attendu = round(brut / (1 + float(tva) / 100), 2) if base == "TTC" else brut
+            assert abs(float(estime) - attendu) < 0.011, f"estimation incohérente sur {id_c} : {estime} ≠ {attendu}"
+
+
+def test_tresorerie_sans_double_compte(conn):
+    vue = _un(conn, "SELECT COALESCE(sum(honoraires_ht), 0) FROM olap.v_kpi_tresorerie WHERE nature IN ('encaisse', 'en_attente_notaire')")
+    faits = _un(conn, "SELECT COALESCE(sum(honoraires_agence_ht), 0) FROM olap.fait_vente")
+    assert vue == faits, f"trésorerie : vue {vue} / ventes {faits} ; chaque vente est soit encaissée, soit en attente"
+    prevu = _un(conn, "SELECT COALESCE(sum(honoraires_ht), 0) FROM olap.v_kpi_tresorerie WHERE nature = 'prevu_compromis'")
+    prevu_fait = _un(conn, "SELECT COALESCE(sum(honoraires_estimes_ht), 0) FROM olap.fait_compromis WHERE statut_projete = 'signe'")
+    assert prevu == prevu_fait
+
+
+def test_tresorerie_compromis_en_cours(conn):
+    """Un compromis signé, acte prévu en mars 2031, apparaît en « prévu » ce mois-là ; un compromis caduc n'apparaît pas.
+    Rejoué dans une transaction annulée, sur des faits temporairement enrichis."""
+    c = _conn()
+    c.autocommit = False
+    try:
+        with c.cursor() as cur:
+            cur.execute("SELECT id_chasseur, id_mandat FROM olap.fait_mandat_cycle LIMIT 1")
+            row = cur.fetchone()
+            if row is None:
+                pytest.skip("aucun mandat dans l'entrepôt")
+            chasseur, mandat = row
+            cur.execute("INSERT INTO olap.fait_compromis (id_compromis, id_date_signature, id_date_acte_prevue, id_chasseur, id_mandat, "
+                        "statut_projete, montant_offre, honoraires_estimes_ht) VALUES "
+                        "(gen_random_uuid(), 20301215, 20310315, %s, %s, 'signe', 300000, 9000), "
+                        "(gen_random_uuid(), 20301215, 20310320, %s, %s, 'caduc', 250000, 7500)", (chasseur, mandat, chasseur, mandat))
+            cur.execute("SELECT nb_dossiers, honoraires_ht FROM olap.v_kpi_tresorerie WHERE nature = 'prevu_compromis' AND annee = 2031 AND mois = 3")
+            assert cur.fetchone() == (1, 9000), "seul le compromis signé doit être prévu en mars 2031"
+    finally:
+        c.rollback()
+        c.close()
+
+
+# 12. KPI-1 jusqu'à l'acte, motifs, acceptation ---------------------------------------------------
+def test_entonnoir_jusqu_a_l_acte(conn):
+    oltp = _un(conn, "SELECT count(DISTINCT m.id_demande) FROM public.acte a JOIN public.v_acte_mandat am ON am.id_acte = a.id_acte "
+                     "JOIN public.mandat m ON m.id_mandat = am.id_mandat_en_vigueur "
+                     "WHERE m.id_demande IN (SELECT id_demande FROM olap.fait_activite_demande)")
+    olap = _un(conn, "SELECT COALESCE(sum(demandes_abouties_acte), 0) FROM olap.v_kpi_conversion_funnel")
+    assert oltp == olap, f"demandes abouties à un acte : OLTP={oltp}, OLAP={olap}"
+    incoherent = _un(conn, "SELECT count(*) FROM olap.fait_activite_demande WHERE a_eu_offre AND NOT a_abouti_mandat")
+    assert incoherent == 0, "une offre suppose un mandat (la proposition est cadrée par un mandat)"
+
+
+def test_motifs_et_acceptation(conn):
+    resilies = _un(conn, "SELECT count(*) FROM olap.fait_mandat_cycle WHERE est_resilie")
+    vue = _un(conn, "SELECT COALESCE(sum(nb_mandats_resilies), 0) FROM olap.v_kpi_motifs_resiliation")
+    assert resilies == vue
+    sans_motif = _un(conn, "SELECT count(*) FROM olap.fait_mandat_cycle WHERE est_resilie AND type_resiliation IS NULL")
+    assert sans_motif == 0, "un mandat résilié a toujours un motif, au pire 'non_renseigne'"
+    ecarts = _un(conn, "SELECT count(*) FROM olap.fait_mandat_cycle f WHERE f.nb_propositions_retenues > f.nb_propositions_soumises "
+                       "OR f.nb_propositions_soumises <> (SELECT count(*) FROM public.proposition p WHERE p.id_mandat = f.id_mandat "
+                       "AND p.statut IN ('soumis','retenu_visite','refuse_client'))")
+    assert ecarts == 0
+

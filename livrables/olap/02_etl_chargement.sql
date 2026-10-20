@@ -2,7 +2,7 @@
 -- 02_etl_chargement.sql — Alimentation de l'entrepôt (ELT en SQL, UPSERT idempotent)
 -- Source : OLTP v8.42. Rejouable : chaque table est chargée par INSERT ... ON CONFLICT.
 -- Lit les VUES d'état de l'OLTP (v_mandat, v_demande, v_acte_mandat, v_honoraires,
--- v_version_courante) : jamais de statut recalculé ici (ADR-048, ADR-051, RB1).
+-- v_version_courante, v_compromis) : jamais de statut recalculé ici (ADR-048, ADR-051, RB1).
 -- ============================================================
 
 BEGIN;
@@ -20,7 +20,10 @@ WITH bornes AS (
     FROM (SELECT date_depot::date AS d FROM public.demande
           UNION ALL SELECT date_signature FROM public.mandat
           UNION ALL SELECT date_signature FROM public.acte
-          UNION ALL SELECT date_visite FROM public.visite) x
+          UNION ALL SELECT date_visite FROM public.visite
+          UNION ALL SELECT date_encaissement FROM public.acte
+          UNION ALL SELECT date_signature FROM public.compromis
+          UNION ALL SELECT date_acte_prevue FROM public.compromis) x
 )
 SELECT to_char(d, 'YYYYMMDD')::integer,
        d::date,
@@ -126,7 +129,8 @@ ON CONFLICT (id_client) DO UPDATE SET
 -- Fait 3 : cycle de vie des mandats (état lu dans v_mandat, jamais recalculé)
 INSERT INTO olap.fait_mandat_cycle (id_mandat, id_date_signature, id_date_fin_theorique, id_chasseur, id_zone, id_client,
                                     id_mandat_precedent, exclusif, statut_projete, est_succes, est_renouvele, est_resilie, est_echu,
-                                    duree_effective_jours, nb_propositions, nb_visites, jours_sans_visite)
+                                    type_resiliation, duree_effective_jours, nb_propositions,
+                                    nb_propositions_soumises, nb_propositions_retenues, nb_visites, jours_sans_visite)
 SELECT vm.id_mandat,
        to_char(vm.date_signature, 'YYYYMMDD')::integer,
        to_char(vm.date_fin, 'YYYYMMDD')::integer,
@@ -140,8 +144,17 @@ SELECT vm.id_mandat,
        vm.statut_calcule = 'renouvele',
        vm.statut_calcule = 'resilie',
        vm.statut_calcule = 'echu',
+       CASE WHEN vm.statut_calcule = 'resilie' THEN COALESCE(vm.type_resiliation, 'non_renseigne') END,   -- état repris sans motif (ADR-051)
        GREATEST(0, COALESCE(vm.date_resiliation, LEAST(vm.date_fin, public.date_reference())) - vm.date_signature)::integer,
        (SELECT count(*)::integer FROM public.proposition p WHERE p.id_mandat = vm.id_mandat),
+       (SELECT count(*)::integer FROM public.proposition p WHERE p.id_mandat = vm.id_mandat
+                                                            AND p.statut IN ('soumis','retenu_visite','refuse_client')),
+       -- retenue = le client l'a retenue pour une visite, ou l'a visitée, ou a fait une offre (un statut resté
+       -- « soumis » alors qu'une offre existe ne doit pas faire baisser le taux d'acceptation)
+       (SELECT count(*)::integer FROM public.proposition p WHERE p.id_mandat = vm.id_mandat AND p.statut IN ('soumis','retenu_visite','refuse_client')
+          AND (p.statut = 'retenu_visite'
+               OR EXISTS (SELECT 1 FROM public.visite v WHERE v.id_proposition = p.id_proposition AND v.realisee)
+               OR EXISTS (SELECT 1 FROM public.offre_acquisition o WHERE o.id_proposition = p.id_proposition))),
        olap.f_nb_visites(vm.id_mandat, NULL, false),
        CASE WHEN vm.statut_calcule = 'actif' THEN
             (public.date_reference() - COALESCE(
@@ -154,13 +167,14 @@ ON CONFLICT (id_mandat) DO UPDATE SET
     id_chasseur = EXCLUDED.id_chasseur, id_zone = EXCLUDED.id_zone, id_client = EXCLUDED.id_client,
     id_mandat_precedent = EXCLUDED.id_mandat_precedent, exclusif = EXCLUDED.exclusif, statut_projete = EXCLUDED.statut_projete,
     est_succes = EXCLUDED.est_succes, est_renouvele = EXCLUDED.est_renouvele, est_resilie = EXCLUDED.est_resilie,
-    est_echu = EXCLUDED.est_echu, duree_effective_jours = EXCLUDED.duree_effective_jours,
-    nb_propositions = EXCLUDED.nb_propositions, nb_visites = EXCLUDED.nb_visites, jours_sans_visite = EXCLUDED.jours_sans_visite;
+    est_echu = EXCLUDED.est_echu, type_resiliation = EXCLUDED.type_resiliation, duree_effective_jours = EXCLUDED.duree_effective_jours,
+    nb_propositions = EXCLUDED.nb_propositions, nb_propositions_soumises = EXCLUDED.nb_propositions_soumises,
+    nb_propositions_retenues = EXCLUDED.nb_propositions_retenues, nb_visites = EXCLUDED.nb_visites, jours_sans_visite = EXCLUDED.jours_sans_visite;
 
 -- Fait 4 : activité des demandes (état lu dans v_demande)
 INSERT INTO olap.fait_activite_demande (id_demande, id_date_depot, id_date_affectation, id_gestionnaire, id_chasseur, id_client,
                                         canal, statut_demande, delai_affectation_heures, delai_qualification_jours,
-                                        a_abouti_mandat, nb_versions_criteres)
+                                        a_abouti_mandat, a_eu_visite, a_eu_offre, a_abouti_acte, nb_versions_criteres)
 SELECT d.id_demande,
        to_char(d.date_depot, 'YYYYMMDD')::integer,
        CASE WHEN d.date_affectation IS NOT NULL THEN to_char(d.date_affectation, 'YYYYMMDD')::integer END,
@@ -173,6 +187,14 @@ SELECT d.id_demande,
        CASE WHEN d.date_qualification IS NOT NULL AND d.date_affectation IS NOT NULL
             THEN round((EXTRACT(EPOCH FROM (d.date_qualification - d.date_affectation)) / 86400.0)::numeric, 2) END,
        EXISTS (SELECT 1 FROM public.mandat m WHERE m.id_demande = d.id_demande),
+       EXISTS (SELECT 1 FROM public.visite v JOIN public.proposition p ON p.id_proposition = v.id_proposition
+               JOIN public.demande_acquereur da ON da.id_demande = p.id_demande AND da.id_client = v.id_visiteur   -- D10 : un acquéreur présent
+               WHERE p.id_demande = d.id_demande AND v.realisee),
+       EXISTS (SELECT 1 FROM public.offre_acquisition o JOIN public.proposition p ON p.id_proposition = o.id_proposition
+               WHERE p.id_demande = d.id_demande),
+       EXISTS (SELECT 1 FROM public.acte a JOIN public.v_acte_mandat am ON am.id_acte = a.id_acte
+               JOIN public.mandat m ON m.id_mandat = am.id_mandat_en_vigueur
+               WHERE m.id_demande = d.id_demande),                                                       -- les deux origines (ADR-053)
        (SELECT count(*)::integer FROM public.demande_version dv WHERE dv.id_demande = d.id_demande)
 FROM public.v_demande d
 WHERE d.id_gestionnaire IS NOT NULL
@@ -182,7 +204,8 @@ ON CONFLICT (id_demande) DO UPDATE SET
     id_gestionnaire = EXCLUDED.id_gestionnaire, id_chasseur = EXCLUDED.id_chasseur, id_client = EXCLUDED.id_client,
     canal = EXCLUDED.canal, statut_demande = EXCLUDED.statut_demande,
     delai_affectation_heures = EXCLUDED.delai_affectation_heures, delai_qualification_jours = EXCLUDED.delai_qualification_jours,
-    a_abouti_mandat = EXCLUDED.a_abouti_mandat, nb_versions_criteres = EXCLUDED.nb_versions_criteres;
+    a_abouti_mandat = EXCLUDED.a_abouti_mandat, a_eu_visite = EXCLUDED.a_eu_visite, a_eu_offre = EXCLUDED.a_eu_offre,
+    a_abouti_acte = EXCLUDED.a_abouti_acte, nb_versions_criteres = EXCLUDED.nb_versions_criteres;
 
 -- Fait 1 : ventes. Deux origines (ADR-053) : chaîne de vente (bien connu) ou hors dispositif (bien inconnu).
 -- Mandat et chasseur = chaîne en vigueur à l'acte (v_acte_mandat, D13) ; délai S1 depuis le mandat initial.
@@ -190,7 +213,8 @@ INSERT INTO olap.fait_vente (id_acte, id_date_acte, id_chasseur, id_gestionnaire
                              id_mandat_en_vigueur, id_mandat_initial, est_hors_dispositif, source_information, est_mandat_exclusif,
                              montant_acte_net_vendeur, honoraires_agence_brut, base_honoraires_mandat, taux_tva_mandat, honoraires_agence_ht,
                              remuneration_chasseur_ht, marge_brute_ht, taux_marge_pct,
-                             delai_depot_a_acte_jours, delai_mandat_a_acte_jours, nb_visites_effectuees, nb_propositions_recues)
+                             delai_depot_a_acte_jours, delai_mandat_a_acte_jours, nb_visites_effectuees, nb_propositions_recues,
+                             est_honoraires_encaisses, id_date_encaissement, delai_acte_a_encaissement_jours)
 SELECT a.id_acte,
        to_char(a.date_signature, 'YYYYMMDD')::integer,
        mv.id_chasseur,
@@ -215,7 +239,10 @@ SELECT a.id_acte,
        (a.date_signature - d.date_depot::date)::integer,
        (a.date_signature - mi.date_signature)::integer,
        olap.f_nb_visites(am.id_mandat_en_vigueur, a.date_signature, true),
-       (SELECT count(*)::integer FROM public.proposition p3 WHERE p3.id_mandat IN (SELECT public.f_chaine_mandats(am.id_mandat_en_vigueur)))
+       (SELECT count(*)::integer FROM public.proposition p3 WHERE p3.id_mandat IN (SELECT public.f_chaine_mandats(am.id_mandat_en_vigueur))),
+       a.honoraires_encaisses,
+       CASE WHEN a.honoraires_encaisses THEN to_char(a.date_encaissement, 'YYYYMMDD')::integer END,
+       CASE WHEN a.honoraires_encaisses THEN (a.date_encaissement - a.date_signature)::integer END
 FROM public.acte a
 JOIN public.v_acte_mandat am     ON am.id_acte = a.id_acte
 JOIN public.mandat mv            ON mv.id_mandat = am.id_mandat_en_vigueur
@@ -242,7 +269,9 @@ ON CONFLICT (id_acte) DO UPDATE SET
     honoraires_agence_ht = EXCLUDED.honoraires_agence_ht, remuneration_chasseur_ht = EXCLUDED.remuneration_chasseur_ht,
     marge_brute_ht = EXCLUDED.marge_brute_ht, taux_marge_pct = EXCLUDED.taux_marge_pct,
     delai_depot_a_acte_jours = EXCLUDED.delai_depot_a_acte_jours, delai_mandat_a_acte_jours = EXCLUDED.delai_mandat_a_acte_jours,
-    nb_visites_effectuees = EXCLUDED.nb_visites_effectuees, nb_propositions_recues = EXCLUDED.nb_propositions_recues;
+    nb_visites_effectuees = EXCLUDED.nb_visites_effectuees, nb_propositions_recues = EXCLUDED.nb_propositions_recues,
+    est_honoraires_encaisses = EXCLUDED.est_honoraires_encaisses, id_date_encaissement = EXCLUDED.id_date_encaissement,
+    delai_acte_a_encaissement_jours = EXCLUDED.delai_acte_a_encaissement_jours;
 
 -- Fait 2 : rémunération gelée (copie des composantes figées, ADR-049 / ADR-052). Zone via la chaîne de vente (NULL hors dispositif).
 INSERT INTO olap.fait_remuneration_chasseur (id_remuneration, id_date_calcul, id_date_acte, id_chasseur, id_zone, id_acte, est_hors_dispositif,
@@ -276,5 +305,30 @@ ON CONFLICT (id_remuneration) DO UPDATE SET
     score_performance_global = EXCLUDED.score_performance_global, taux_base_pct = EXCLUDED.taux_base_pct,
     majoration_anciennete_pct = EXCLUDED.majoration_anciennete_pct, modulation_performance_pct = EXCLUDED.modulation_performance_pct,
     taux_final_pct = EXCLUDED.taux_final_pct, montant_remuneration_ht = EXCLUDED.montant_remuneration_ht, est_annulee = EXCLUDED.est_annulee;
+
+-- Fait 5 : compromis (KPI-2, trésorerie prévisionnelle). État lu dans v_compromis ; honoraires ESTIMÉS
+-- d'après le mandat qui cadre la proposition (forfait + taux x montant de l'offre), convertis en HT (D19).
+INSERT INTO olap.fait_compromis (id_compromis, id_date_signature, id_date_acte_prevue, id_chasseur, id_zone, id_mandat,
+                                 statut_projete, montant_offre, honoraires_estimes_ht)
+SELECT vc.id_compromis,
+       to_char(vc.date_signature, 'YYYYMMDD')::integer,
+       CASE WHEN vc.date_acte_prevue IS NOT NULL THEN to_char(vc.date_acte_prevue, 'YYYYMMDD')::integer END,
+       m.id_chasseur,
+       b.id_zone,
+       m.id_mandat,
+       vc.statut_calcule,
+       o.montant,
+       CASE WHEN m.base_honoraires = 'TTC' THEN round(est.brut / (1 + m.taux_tva / 100), 2) ELSE est.brut END
+FROM public.v_compromis vc
+JOIN public.offre_acquisition o ON o.id_offre = vc.id_offre
+JOIN public.proposition p       ON p.id_proposition = o.id_proposition
+JOIN public.mandat m            ON m.id_mandat = p.id_mandat
+JOIN public.bien b              ON b.id_bien = p.id_bien
+CROSS JOIN LATERAL (SELECT round(COALESCE(m.forfait_honoraires, 0) + COALESCE(m.taux_honoraires, 0) / 100 * o.montant, 2) AS brut) est
+ON CONFLICT (id_compromis) DO UPDATE SET
+    id_date_signature = EXCLUDED.id_date_signature, id_date_acte_prevue = EXCLUDED.id_date_acte_prevue,
+    id_chasseur = EXCLUDED.id_chasseur, id_zone = EXCLUDED.id_zone, id_mandat = EXCLUDED.id_mandat,
+    statut_projete = EXCLUDED.statut_projete, montant_offre = EXCLUDED.montant_offre,
+    honoraires_estimes_ht = EXCLUDED.honoraires_estimes_ht;
 
 COMMIT;
